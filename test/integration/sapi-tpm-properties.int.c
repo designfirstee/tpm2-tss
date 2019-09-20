@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -12,7 +16,6 @@
 #define LOGMODULE test
 #include "util/log.h"
 #include "test.h"
-#include "sysapi_util.h"
 
 int
 test_invoke (TSS2_SYS_CONTEXT *sapi_context)

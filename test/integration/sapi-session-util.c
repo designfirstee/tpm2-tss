@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <inttypes.h>
 
 #include "session-util.h"
@@ -577,8 +581,9 @@ gen_session_key(
 
     iv->size = aes_block_size;
     session_key->size = (session->symmetric.keyBits.sym) / 8;
+    UINT16 total_size = session_key->size + iv->size;
     if (iv->size > sizeof (iv->buffer) ||
-        (session_key->size + iv->size) > TPM2_MAX_DIGEST_BUFFER)
+         (total_size) > TPM2_MAX_DIGEST_BUFFER)
         return TSS2_SYS_RC_GENERAL_FAILURE;
 
     memcpy (iv->buffer, &key.buffer[session_key->size], iv->size);

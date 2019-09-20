@@ -1,15 +1,17 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "tss2_sys.h"
-
-#include "tss2-sys/sysapi_util.h"
 
 #define LOGMODULE test
 #include "util/log.h"
@@ -50,7 +52,7 @@ test_invoke (TSS2_SYS_CONTEXT *sapi_context)
     TSS2_TCTI_RECEIVE (&tctiContext) = (TSS2_TCTI_RECEIVE_FCN)1;
     TSS2_TCTI_TRANSMIT (&tctiContext) = (TSS2_TCTI_TRANSMIT_FCN)0;
 
-    rc = Tss2_Sys_Initialize( (TSS2_SYS_CONTEXT *)1, sizeof( _TSS2_SYS_CONTEXT_BLOB ), (TSS2_TCTI_CONTEXT *)&tctiContext, (TSS2_ABI_VERSION *)1 );
+    rc = Tss2_Sys_Initialize( (TSS2_SYS_CONTEXT *)1, Tss2_Sys_GetContextSize (0), (TSS2_TCTI_CONTEXT *)&tctiContext, (TSS2_ABI_VERSION *)1 );
     if( rc != TSS2_SYS_RC_BAD_TCTI_STRUCTURE ) {
         LOG_ERROR("Sys_Initialize FAILED! Response Code : %x", rc);
         exit(1);
@@ -60,7 +62,7 @@ test_invoke (TSS2_SYS_CONTEXT *sapi_context)
     TSS2_TCTI_RECEIVE (&tctiContext) = (TSS2_TCTI_RECEIVE_FCN)0;
     TSS2_TCTI_TRANSMIT (&tctiContext) = (TSS2_TCTI_TRANSMIT_FCN)1;
 
-    rc = Tss2_Sys_Initialize( (TSS2_SYS_CONTEXT *)1, sizeof( _TSS2_SYS_CONTEXT_BLOB ), (TSS2_TCTI_CONTEXT *)&tctiContext, (TSS2_ABI_VERSION *)1 );
+    rc = Tss2_Sys_Initialize( (TSS2_SYS_CONTEXT *)1, Tss2_Sys_GetContextSize (0), (TSS2_TCTI_CONTEXT *)&tctiContext, (TSS2_ABI_VERSION *)1 );
     if( rc != TSS2_SYS_RC_BAD_TCTI_STRUCTURE ) {
         LOG_ERROR("Sys_Initialize FAILED! Response Code : %x", rc);
         exit(1);

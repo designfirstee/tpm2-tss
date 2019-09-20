@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -12,6 +16,7 @@
 #include "test-esapi.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test the ESAPI command Esys_NV_UndefineSpaceSpecial,
  *  The NV space attributes TPMA_NV_PLATFORMCREATE and TPMA_NV_POLICY_DELETE
@@ -43,6 +48,7 @@ test_esys_policy_nv_undefine_special(ESYS_CONTEXT * esys_context)
     TSS2_RC r;
     ESYS_TR nvHandle = ESYS_TR_NONE;
     ESYS_TR policySession = ESYS_TR_NONE;
+    ESYS_TR session = ESYS_TR_NONE;
     int failure_return = EXIT_FAILURE;
     /*
      * First the policy value for NV_UndefineSpaceSpecial has to be
@@ -126,7 +132,8 @@ test_esys_policy_nv_undefine_special(ESYS_CONTEXT * esys_context)
                             &publicInfo,
                             &nvHandle);
 
-    if ((r & ~TPM2_RC_N_MASK) == TPM2_RC_BAD_AUTH) {
+    if ((r & ~TPM2_RC_N_MASK) == TPM2_RC_BAD_AUTH  ||
+        (r & ~TPM2_RC_N_MASK) == TPM2_RC_HIERARCHY) {
         /* Platform authorization not possible test will be skipped */
         LOG_WARNING("Platform authorization not possible.");
         failure_return = EXIT_SKIP;
@@ -145,6 +152,20 @@ test_esys_policy_nv_undefine_special(ESYS_CONTEXT * esys_context)
                    21, 22, 23, 24, 25, 26, 27, 28, 29, 30}
     };
 
+    /* Create HMAC session to test HMAC with session name for policy sessions */
+    r = Esys_StartAuthSession(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
+                              ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+                              &policyNonceCaller,
+                              TPM2_SE_HMAC, &policySymmetric, TPM2_ALG_SHA1,
+                              &session);
+    goto_if_error(r, "Error: During initialization of session", error);
+
+    TPMA_SESSION sessionAttributes = TPMA_SESSION_AUDIT |
+                                     TPMA_SESSION_CONTINUESESSION;
+
+    r = Esys_TRSess_SetAttributes(esys_context, session, sessionAttributes, 0xFF);
+    goto_if_error(r, "Error: During SetAttributes", error);
+
     r = Esys_StartAuthSession(esys_context, ESYS_TR_NONE, ESYS_TR_NONE,
                               ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
                               &policyNonceCaller,
@@ -154,7 +175,7 @@ test_esys_policy_nv_undefine_special(ESYS_CONTEXT * esys_context)
 
     r = Esys_PolicyAuthValue(esys_context,
                              policySession,
-                             ESYS_TR_NONE,
+                             session,
                              ESYS_TR_NONE,
                              ESYS_TR_NONE
                              );
@@ -162,7 +183,7 @@ test_esys_policy_nv_undefine_special(ESYS_CONTEXT * esys_context)
 
     r = Esys_PolicyCommandCode(esys_context,
                                policySession,
-                               ESYS_TR_NONE,
+                               session,
                                ESYS_TR_NONE,
                                ESYS_TR_NONE,
                                TPM2_CC_NV_UndefineSpaceSpecial
@@ -189,6 +210,9 @@ test_esys_policy_nv_undefine_special(ESYS_CONTEXT * esys_context)
     r = Esys_FlushContext(esys_context, sessionTrial);
     goto_if_error(r, "Flushing context", error);
 
+    r = Esys_FlushContext(esys_context, session);
+    goto_if_error(r, "Flushing context", error);
+
     r = Esys_FlushContext(esys_context, policySession);
     goto_if_error(r, "Flushing context", error);
 
@@ -199,6 +223,12 @@ test_esys_policy_nv_undefine_special(ESYS_CONTEXT * esys_context)
     if (sessionTrial != ESYS_TR_NONE) {
         if (Esys_FlushContext(esys_context, sessionTrial) != TSS2_RC_SUCCESS) {
             LOG_ERROR("Cleanup policySession failed.");
+        }
+    }
+
+    if (session != ESYS_TR_NONE) {
+        if (Esys_FlushContext(esys_context, session) != TSS2_RC_SUCCESS) {
+            LOG_ERROR("Cleanup session failed.");
         }
     }
 

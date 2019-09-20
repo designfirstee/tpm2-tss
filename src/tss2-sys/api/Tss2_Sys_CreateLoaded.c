@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************;
  * Copyright (c) 2018, Intel Corporation
  * All rights reserved.
  ***********************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_tpm2_types.h"
 #include "tss2_mu.h"
@@ -49,18 +53,9 @@ TSS2_RC Tss2_Sys_CreateLoaded_Prepare(
     if (rval)
         return rval;
 
-    if (!inPublic) {
-        rval = Tss2_MU_UINT16_Marshal(0, ctx->cmdBuffer,
-                                      ctx->maxCmdSize,
-                                      &ctx->nextData);
-
-    } else {
-
-        rval = Tss2_MU_TPM2B_TEMPLATE_Marshal(inPublic, ctx->cmdBuffer,
-                                              ctx->maxCmdSize,
-                                              &ctx->nextData);
-    }
-
+    rval = Tss2_MU_TPM2B_TEMPLATE_Marshal(inPublic, ctx->cmdBuffer,
+                                          ctx->maxCmdSize,
+                                          &ctx->nextData);
     if (rval)
         return rval;
 

@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +34,10 @@ tcti_map_entry_t tcti_map_table[] = {
     {
      .name = "socket",
      .type = SOCKET_TCTI,
+     },
+    {
+     .name = "fuzzing",
+     .type = FUZZING_TCTI,
      },
     {
      .name = "unknown",
@@ -85,6 +93,8 @@ sanity_check_test_opts(test_opts_t * opts)
                     "socket_address or socket_port is NULL, check env\n");
             return 1;
         }
+        break;
+    case FUZZING_TCTI:
         break;
     default:
         fprintf(stderr, "unknown TCTI type, check env\n");

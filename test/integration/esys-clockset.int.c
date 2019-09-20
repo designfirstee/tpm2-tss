@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -12,8 +16,9 @@
 #include "test-esapi.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
-/** Test the ESAPI function Esys_ClockSet and Esys_ReadClock. 
+/** Test the ESAPI function Esys_ClockSet and Esys_ReadClock.
  *
  *\b Note: platform authorization needed.
  *
@@ -34,7 +39,7 @@ test_esys_clockset(ESYS_CONTEXT * esys_context)
     TSS2_RC r;
     int failure_return = EXIT_FAILURE;
 
-    ESYS_TR auth_handle = ESYS_TR_RH_PLATFORM;
+    ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
     TPMS_TIME_INFO *currentTime;
 
     r = Esys_ReadClock(esys_context,

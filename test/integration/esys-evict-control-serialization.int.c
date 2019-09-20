@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,6 +15,7 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test EvictControl and ESAPI Serialization.
  *
@@ -45,7 +50,7 @@ test_esys_evict_control_serialization(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -150,13 +155,15 @@ test_esys_evict_control_serialization(ESYS_CONTEXT * esys_context)
     r = Esys_TR_Deserialize(esys_context, buffer, buffer_size, &persistent_handle2);
     goto_if_error(r, "Error Esys_TR_Deserialize", error);
 
+    free(buffer);
+
     TPM2B_AUTH authKey2 = {
         .size = 6,
         .buffer = {6, 7, 8, 9, 10, 11}
     };
 
     TPM2B_SENSITIVE_CREATE inSensitive2 = {
-        .size = 1,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,

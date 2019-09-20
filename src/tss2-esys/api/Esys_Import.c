@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_mu.h"
 #include "tss2_sys.h"
@@ -13,54 +17,7 @@
 #include "esys_mu.h"
 #define LOGMODULE esys
 #include "util/log.h"
-
-/** Store command parameters inside the ESYS_CONTEXT for use during _Finish */
-static void store_input_parameters (
-    ESYS_CONTEXT *esysContext,
-    ESYS_TR parentHandle,
-    const TPM2B_DATA *encryptionKey,
-    const TPM2B_PUBLIC *objectPublic,
-    const TPM2B_PRIVATE *duplicate,
-    const TPM2B_ENCRYPTED_SECRET *inSymSeed,
-    const TPMT_SYM_DEF_OBJECT *symmetricAlg)
-{
-    esysContext->in.Import.parentHandle = parentHandle;
-    if (encryptionKey == NULL) {
-        esysContext->in.Import.encryptionKey = NULL;
-    } else {
-        esysContext->in.Import.encryptionKeyData = *encryptionKey;
-        esysContext->in.Import.encryptionKey =
-            &esysContext->in.Import.encryptionKeyData;
-    }
-    if (objectPublic == NULL) {
-        esysContext->in.Import.objectPublic = NULL;
-    } else {
-        esysContext->in.Import.objectPublicData = *objectPublic;
-        esysContext->in.Import.objectPublic =
-            &esysContext->in.Import.objectPublicData;
-    }
-    if (duplicate == NULL) {
-        esysContext->in.Import.duplicate = NULL;
-    } else {
-        esysContext->in.Import.duplicateData = *duplicate;
-        esysContext->in.Import.duplicate =
-            &esysContext->in.Import.duplicateData;
-    }
-    if (inSymSeed == NULL) {
-        esysContext->in.Import.inSymSeed = NULL;
-    } else {
-        esysContext->in.Import.inSymSeedData = *inSymSeed;
-        esysContext->in.Import.inSymSeed =
-            &esysContext->in.Import.inSymSeedData;
-    }
-    if (symmetricAlg == NULL) {
-        esysContext->in.Import.symmetricAlg = NULL;
-    } else {
-        esysContext->in.Import.symmetricAlgData = *symmetricAlg;
-        esysContext->in.Import.symmetricAlg =
-            &esysContext->in.Import.symmetricAlgData;
-    }
-}
+#include "util/aux_util.h"
 
 /** One-Call function for TPM2_Import
  *
@@ -80,13 +37,12 @@ static void store_input_parameters (
  * @param[in]  duplicate The symmetrically encrypted duplicate object that may
  *             contain an inner symmetric wrapper.
  * @param[in]  inSymSeed The seed for the symmetric key and HMAC key.
- * @param[in]  symmetricAlg Definition for the symmetric algorithm to use for the
- *             inner wrapper.
- * @param[out] outPrivate The sensitive area encrypted with the symmetric key of
- *             parentHandle.
+ * @param[in]  symmetricAlg Definition for the symmetric algorithm to use for
+ *             the inner wrapper.
+ * @param[out] outPrivate The sensitive area encrypted with the symmetric key
+ *             of parentHandle.
  *             (callee-allocated)
- * @retval TSS2_RC_SUCCESS on success
- * @retval ESYS_RC_SUCCESS if the function call was a success.
+ * @retval TSS2_RC_SUCCESS if the function call was a success.
  * @retval TSS2_ESYS_RC_BAD_REFERENCE if the esysContext or required input
  *         pointers or required output handle references are NULL.
  * @retval TSS2_ESYS_RC_BAD_CONTEXT: if esysContext corruption is detected.
@@ -97,13 +53,15 @@ static void store_input_parameters (
  * @retval TSS2_ESYS_RC_INSUFFICIENT_RESPONSE: if the TPM's response does not
  *          at least contain the tag, response length, and response code.
  * @retval TSS2_ESYS_RC_MALFORMED_RESPONSE: if the TPM's response is corrupted.
+ * @retval TSS2_ESYS_RC_RSP_AUTH_FAILED: if the response HMAC from the TPM
+           did not verify.
  * @retval TSS2_ESYS_RC_MULTIPLE_DECRYPT_SESSIONS: if more than one session has
  *         the 'decrypt' attribute bit set.
  * @retval TSS2_ESYS_RC_MULTIPLE_ENCRYPT_SESSIONS: if more than one session has
  *         the 'encrypt' attribute bit set.
- * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown to the
- *         ESYS_CONTEXT or are of the wrong type or if required ESYS_TR objects
- *         are ESYS_TR_NONE.
+ * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown
+ *         to the ESYS_CONTEXT or are of the wrong type or if required
+ *         ESYS_TR objects are ESYS_TR_NONE.
  * @retval TSS2_RCs produced by lower layers of the software stack may be
  *         returned to the caller unaltered unless handled internally.
  */
@@ -123,16 +81,9 @@ Esys_Import(
 {
     TSS2_RC r;
 
-    r = Esys_Import_Async(esysContext,
-                parentHandle,
-                shandle1,
-                shandle2,
-                shandle3,
-                encryptionKey,
-                objectPublic,
-                duplicate,
-                inSymSeed,
-                symmetricAlg);
+    r = Esys_Import_Async(esysContext, parentHandle, shandle1, shandle2,
+                          shandle3, encryptionKey, objectPublic, duplicate,
+                          inSymSeed, symmetricAlg);
     return_if_error(r, "Error in async function");
 
     /* Set the timeout to indefinite for now, since we want _Finish to block */
@@ -146,8 +97,7 @@ Esys_Import(
      * a retransmission of the command via TPM2_RC_YIELDED.
      */
     do {
-        r = Esys_Import_Finish(esysContext,
-                outPrivate);
+        r = Esys_Import_Finish(esysContext, outPrivate);
         /* This is just debug information about the reattempt to finish the
            command */
         if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN)
@@ -180,8 +130,8 @@ Esys_Import(
  * @param[in]  duplicate The symmetrically encrypted duplicate object that may
  *             contain an inner symmetric wrapper.
  * @param[in]  inSymSeed The seed for the symmetric key and HMAC key.
- * @param[in]  symmetricAlg Definition for the symmetric algorithm to use for the
- *             inner wrapper.
+ * @param[in]  symmetricAlg Definition for the symmetric algorithm to use for
+ *             the inner wrapper.
  * @retval ESYS_RC_SUCCESS if the function call was a success.
  * @retval TSS2_ESYS_RC_BAD_REFERENCE if the esysContext or required input
  *         pointers or required output handle references are NULL.
@@ -194,9 +144,9 @@ Esys_Import(
  *         the 'decrypt' attribute bit set.
  * @retval TSS2_ESYS_RC_MULTIPLE_ENCRYPT_SESSIONS: if more than one session has
  *         the 'encrypt' attribute bit set.
- * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown to the
-           ESYS_CONTEXT or are of the wrong type or if required ESYS_TR objects
-           are ESYS_TR_NONE.
+ * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown
+ *         to the ESYS_CONTEXT or are of the wrong type or if required
+ *         ESYS_TR objects are ESYS_TR_NONE.
  */
 TSS2_RC
 Esys_Import_Async(
@@ -230,15 +180,9 @@ Esys_Import_Async(
         return r;
     esysContext->state = _ESYS_STATE_INTERNALERROR;
 
-    /* Check and store input parameters */
+    /* Check input parameters */
     r = check_session_feasibility(shandle1, shandle2, shandle3, 1);
     return_state_if_error(r, _ESYS_STATE_INIT, "Check session usage");
-    store_input_parameters(esysContext, parentHandle,
-                encryptionKey,
-                objectPublic,
-                duplicate,
-                inSymSeed,
-                symmetricAlg);
 
     /* Retrieve the metadata objects for provided handles */
     r = esys_GetResourceObject(esysContext, parentHandle, &parentHandleNode);
@@ -246,12 +190,10 @@ Esys_Import_Async(
 
     /* Initial invocation of SAPI to prepare the command buffer with parameters */
     r = Tss2_Sys_Import_Prepare(esysContext->sys,
-                (parentHandleNode == NULL) ? TPM2_RH_NULL : parentHandleNode->rsrc.handle,
-                encryptionKey,
-                objectPublic,
-                duplicate,
-                inSymSeed,
-                symmetricAlg);
+                                (parentHandleNode == NULL) ? TPM2_RH_NULL
+                                 : parentHandleNode->rsrc.handle, encryptionKey,
+                                objectPublic, duplicate, inSymSeed,
+                                symmetricAlg);
     return_state_if_error(r, _ESYS_STATE_INIT, "SAPI Prepare returned error.");
 
     /* Calculate the cpHash Values */
@@ -264,14 +206,19 @@ Esys_Import_Async(
 
     /* Generate the auth values and set them in the SAPI command buffer */
     r = iesys_gen_auths(esysContext, parentHandleNode, NULL, NULL, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "Error in computation of auth values");
+    return_state_if_error(r, _ESYS_STATE_INIT,
+                          "Error in computation of auth values");
+
     esysContext->authsCount = auths.count;
-    r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    if (auths.count > 0) {
+        r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
+        return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    }
 
     /* Trigger execution and finish the async invocation */
     r = Tss2_Sys_ExecuteAsync(esysContext->sys);
-    return_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Finish (Execute Async)");
+    return_state_if_error(r, _ESYS_STATE_INTERNALERROR,
+                          "Finish (Execute Async)");
 
     esysContext->state = _ESYS_STATE_SENT;
 
@@ -286,8 +233,8 @@ Esys_Import_Async(
  * output parameter if the value is not required.
  *
  * @param[in,out] esysContext The ESYS_CONTEXT.
- * @param[out] outPrivate The sensitive area encrypted with the symmetric key of
- *             parentHandle.
+ * @param[out] outPrivate The sensitive area encrypted with the symmetric key
+ *             of parentHandle.
  *             (callee-allocated)
  * @retval TSS2_RC_SUCCESS on success
  * @retval ESYS_RC_SUCCESS if the function call was a success.
@@ -301,7 +248,9 @@ Esys_Import_Async(
  * @retval TSS2_ESYS_RC_TRY_AGAIN: if the timeout counter expires before the
  *         TPM response is received.
  * @retval TSS2_ESYS_RC_INSUFFICIENT_RESPONSE: if the TPM's response does not
- *          at least contain the tag, response length, and response code.
+ *         at least contain the tag, response length, and response code.
+ * @retval TSS2_ESYS_RC_RSP_AUTH_FAILED: if the response HMAC from the TPM did
+ *         not verify.
  * @retval TSS2_ESYS_RC_MALFORMED_RESPONSE: if the TPM's response is corrupted.
  * @retval TSS2_RCs produced by lower layers of the software stack may be
  *         returned to the caller unaltered unless handled internally.
@@ -321,7 +270,8 @@ Esys_Import_Finish(
     }
 
     /* Check for correct sequence and set sequence to irregular for now */
-    if (esysContext->state != _ESYS_STATE_SENT) {
+    if (esysContext->state != _ESYS_STATE_SENT &&
+        esysContext->state != _ESYS_STATE_RESUBMISSION) {
         LOG_ERROR("Esys called in bad sequence.");
         return TSS2_ESYS_RC_BAD_SEQUENCE;
     }
@@ -347,22 +297,13 @@ Esys_Import_Finish(
     if (r == TPM2_RC_RETRY || r == TPM2_RC_TESTING || r == TPM2_RC_YIELDED) {
         LOG_DEBUG("TPM returned RETRY, TESTING or YIELDED, which triggers a "
             "resubmission: %" PRIx32, r);
-        if (esysContext->submissionCount >= _ESYS_MAX_SUBMISSIONS) {
+        if (esysContext->submissionCount++ >= _ESYS_MAX_SUBMISSIONS) {
             LOG_WARNING("Maximum number of (re)submissions has been reached.");
             esysContext->state = _ESYS_STATE_INIT;
             goto error_cleanup;
         }
         esysContext->state = _ESYS_STATE_RESUBMISSION;
-        r = Esys_Import_Async(esysContext,
-                esysContext->in.Import.parentHandle,
-                esysContext->session_type[0],
-                esysContext->session_type[1],
-                esysContext->session_type[2],
-                esysContext->in.Import.encryptionKey,
-                esysContext->in.Import.objectPublic,
-                esysContext->in.Import.duplicate,
-                esysContext->in.Import.inSymSeed,
-                esysContext->in.Import.symmetricAlg);
+        r = Tss2_Sys_ExecuteAsync(esysContext->sys);
         if (r != TSS2_RC_SUCCESS) {
             LOG_WARNING("Error attempting to resubmit");
             /* We do not set esysContext->state here but inherit the most recent
@@ -390,15 +331,18 @@ Esys_Import_Finish(
      */
     r = iesys_check_response(esysContext);
     goto_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Error: check response",
-                      error_cleanup);
+                        error_cleanup);
+
     /*
      * After the verification of the response we call the complete function
      * to deliver the result.
      */
     r = Tss2_Sys_Import_Complete(esysContext->sys,
-                (outPrivate != NULL) ? *outPrivate : NULL);
-    goto_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Received error from SAPI"
-                        " unmarshaling" ,error_cleanup);
+                                 (outPrivate != NULL) ? *outPrivate : NULL);
+    goto_state_if_error(r, _ESYS_STATE_INTERNALERROR,
+                        "Received error from SAPI unmarshaling" ,
+                        error_cleanup);
+
     esysContext->state = _ESYS_STATE_INIT;
 
     return TSS2_RC_SUCCESS;

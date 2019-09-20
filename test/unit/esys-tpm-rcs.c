@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG All
  * rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdarg.h>
 #include <inttypes.h>
@@ -17,6 +21,7 @@
 #include "tss2-esys/esys_iutil.h"
 #define LOGMODULE tests
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /**
  * This unit test looks into a set of Esys_<cmd>() functions and tests the

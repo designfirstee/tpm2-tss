@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdarg.h>
 #include <inttypes.h>
@@ -29,7 +33,9 @@ tcti_fake_finalize(TSS2_TCTI_CONTEXT *tctiContext)
 }
 
 TSS2_RC
-get_tcti_default(TSS2_TCTI_CONTEXT **tcti) {
+__wrap_Tss2_TctiLdr_Initialize (const char *nameConf,
+                                TSS2_TCTI_CONTEXT **tcti)
+{
     if (tcti == NULL)
         return TSS2_BASE_RC_GENERAL_FAILURE;
 
@@ -47,6 +53,12 @@ get_tcti_default(TSS2_TCTI_CONTEXT **tcti) {
     TSS2_TCTI_SET_LOCALITY(*faketcti) = NULL;
 
     return TSS2_RC_SUCCESS;
+}
+
+void
+tctildr_finalize_data (void **data)
+{
+    return;
 }
 
 static void

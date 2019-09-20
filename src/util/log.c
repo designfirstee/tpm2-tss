@@ -1,7 +1,12 @@
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #define LOGMODULE log
 #include "log.h"
@@ -15,7 +20,58 @@
 #define unlikely(x)     (x)
 #endif
 
-log_level
+/**
+ * Compares two strings byte by byte and ignores the
+ * character's case. Stops at the n-th byte of both
+ * strings.
+ *
+ * This is basically a replacement of the POSIX-function
+ * _strncasecmp_. Since tpm2-tss is supposed to be compatible
+ * with ISO C99 and not with POSIX, _strncasecmp_ had to be
+ * replaced. This function creates lowercase representations
+ * of the strings and compares them bytewise.
+ *
+ * @param string1 The first of the two strings to compare
+ * @param string2 The second of the two strings to compare
+ * @param n The maximum number of bytes to compare
+ * @return 0 if both strings are equal (case insensitive),
+ *  an integer greater than zero if string1 is greater than
+ *  string 2 and an integer smaller than zero if string1 is
+ *  smaller than string2
+ *
+ */
+static int
+case_insensitive_strncmp(const char *string1,
+        const char *string2,
+        size_t n)
+{
+    if ((string1 == NULL) && (string2 == NULL)) {
+        return 0;
+    }
+    if ((string1 == NULL) && (string2 != NULL)) {
+        return -1;
+    }
+    if ((string1 != NULL) && (string2 == NULL)) {
+        return 1;
+    }
+    if (n == 0) { // Zero bytes are always equal
+        return 0;
+    }
+    if (string1 == string2) { // return equal if they point to same location
+        return 0;
+    }
+
+    int result;
+    do {
+        result = tolower((unsigned char) *string1) - tolower((unsigned char) *string2);
+        if (result != 0) {
+                break;
+        }
+    } while (*string1++ != '\0' && *string2++ != '\0' && --n );
+    return result;
+}
+
+static log_level
 getLogLevel(const char *module, log_level logdefault);
 
 void
@@ -85,18 +141,18 @@ doLog(log_level loglevel, const char *module, log_level logdefault,
     va_end(vaargs);
 }
 
-log_level
+static log_level
 log_stringlevel(const char *n)
 {
     for(log_level i = 0; i < sizeof(log_strings)/sizeof(log_strings[0]); i++) {
-        if (strncasecmp(log_strings[i], n, strlen(log_strings[i])) == 0) {
+        if (case_insensitive_strncmp(log_strings[i], n, strlen(log_strings[i])) == 0) {
             return i;
         }
     }
     return LOGLEVEL_UNDEFINED;
 }
 
-log_level
+static log_level
 getLogLevel(const char *module, log_level logdefault)
 {
     log_level loglevel = logdefault;
@@ -105,9 +161,10 @@ getLogLevel(const char *module, log_level logdefault)
     if (envlevel == NULL)
         return loglevel;
     while ((i = strchr(i, '+')) != NULL) {
-        if ((envlevel <= i - strlen("all") && strncasecmp(i - 3, "all", 3) == 0) ||
+        if ((envlevel <= i - strlen("all") &&
+	     case_insensitive_strncmp(i - 3, "all", 3) == 0) ||
             (envlevel <= i - strlen(module) &&
-             strncasecmp(i - strlen(module), module, strlen(module)) == 0)) {
+             case_insensitive_strncmp(i - strlen(module), module, strlen(module)) == 0)) {
             log_level tmp = log_stringlevel(i+1);
             if (tmp != LOGLEVEL_UNDEFINED)
                 loglevel = tmp;
@@ -116,4 +173,3 @@ getLogLevel(const char *module, log_level logdefault)
     }
     return loglevel;
 }
-

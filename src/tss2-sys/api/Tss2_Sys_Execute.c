@@ -1,10 +1,15 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************;
  * Copyright (c) 2015 - 2018, Intel Corporation
  * All rights reserved.
  ***********************************************************************/
 
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <inttypes.h>
+#include <string.h>
 
 #include "tss2_tpm2_types.h"
 #include "tss2_mu.h"
@@ -30,6 +35,11 @@ TSS2_RC Tss2_Sys_ExecuteAsync(TSS2_SYS_CONTEXT *sysContext)
     if (rval)
         return rval;
 
+    /* Keep a copy of the cmd header to be able reissue the command
+     * after receiving a TPM error
+     */
+    memcpy(ctx->cmd_header, ctx->cmdBuffer, sizeof(ctx->cmd_header));
+
     ctx->previousStage = CMD_STAGE_SEND_COMMAND;
 
     return rval;
@@ -47,8 +57,32 @@ TSS2_RC Tss2_Sys_ExecuteFinish(TSS2_SYS_CONTEXT *sysContext, int32_t timeout)
     if (ctx->previousStage != CMD_STAGE_SEND_COMMAND)
         return TSS2_SYS_RC_BAD_SEQUENCE;
 
-    responseSize = ctx->maxCmdSize;
+#ifdef TCTI_PARTIAL_READ
+    /*
+     * First call receive with NULL as the response buffer to
+     * get the size of the response
+     */
+    rval = Tss2_Tcti_Receive(ctx->tctiContext, &responseSize,
+                             NULL, timeout);
+    if (rval)
+        return rval;
 
+    if (responseSize < sizeof(TPM20_Header_Out)) {
+        ctx->previousStage = CMD_STAGE_PREPARE;
+        return TSS2_SYS_RC_INSUFFICIENT_RESPONSE;
+    }
+    if (responseSize > ctx->maxCmdSize) {
+        ctx->previousStage = CMD_STAGE_PREPARE;
+        return TSS2_SYS_RC_INSUFFICIENT_CONTEXT;
+    }
+#else
+    /* For none partial reads set the size to maxCmdSize */
+    responseSize = ctx->maxCmdSize;
+#endif
+
+    /*
+     * Then call receive again with the response buffer to read the response
+     */
     rval = Tss2_Tcti_Receive(ctx->tctiContext, &responseSize,
                              ctx->cmdBuffer, timeout);
     if (rval == TSS2_TCTI_RC_INSUFFICIENT_BUFFER)
@@ -80,7 +114,7 @@ TSS2_RC Tss2_Sys_ExecuteFinish(TSS2_SYS_CONTEXT *sysContext, int32_t timeout)
             LOG_ERROR("Unsupported device. The device is a TPM 1.2");
             return TSS2_SYS_RC_GENERAL_FAILURE;
         } else {
-            LOG_ERROR("Malformed reponse: Invalid tag in response header: %" PRIx32,
+            LOG_ERROR("Malformed reponse: Invalid tag in response header: %" PRIx16,
                       ctx->rsp_header.tag);
             return TSS2_SYS_RC_MALFORMED_RESPONSE;
         }
@@ -106,16 +140,21 @@ TSS2_RC Tss2_Sys_ExecuteFinish(TSS2_SYS_CONTEXT *sysContext, int32_t timeout)
 
     rval = ctx->rsp_header.responseCode;
 
-    /* If we received a TPM error other than CANCELED or if we didn't
-     * receive enough response bytes, reset SAPI state machine to
+    /* If didn't receive enough response bytes, reset SAPI state machine to
      * CMD_STAGE_PREPARE. There's nothing else we can do for current command.
      */
     if (ctx->rsp_header.responseSize < sizeof(TPM20_Header_Out)) {
         ctx->previousStage = CMD_STAGE_PREPARE;
         return TSS2_SYS_RC_INSUFFICIENT_RESPONSE;
     }
-    if (rval == TPM2_RC_CANCELED) {
+
+    /* If we received a TPM error then reset SAPI state machine to
+     * CMD_STAGE_PREPARE, and restore the command header so the command
+     * can be reissued without going through the usual *_prepare stage.
+     */
+    if (rval && rval != TPM2_RC_INITIALIZE) {
         ctx->previousStage = CMD_STAGE_PREPARE;
+        memcpy(ctx->cmdBuffer, ctx->cmd_header, sizeof(ctx->cmd_header));
         return rval;
     }
 

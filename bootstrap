@@ -60,7 +60,25 @@ echo "Generating file lists: ${VARS_FILE}"
 
   src_listvar "src/tss2-mu" "*.c" "TSS2_MU_C"
   src_listvar "src/tss2-mu" "*.h" "TSS2_MU_H"
-  printf "TSS2_MU_SRC = \$(TSS2_MU_C) \$(TSS2_MU_H)"
+  printf "TSS2_MU_SRC = \$(TSS2_MU_C) \$(TSS2_MU_H)\n"
+
+  src_listvar "src/tss2-rc" "*.c" "TSS2_RC_C"
+  src_listvar "src/tss2-rc" "*.h" "TSS2_RC_H"
+  printf "TSS2_RC_SRC = \$(TSS2_RC_C) \$(TSS2_RC_H)"
 ) > ${VARS_FILE}
 
-${AUTORECONF} --install --sym
+# Do not generate fuzz tests unless environment variable GEN_FUZZ is set to 1
+if test "${GEN_FUZZ}0" -eq 10; then
+  echo "Generating fuzz tests"
+  script/gen_fuzz.py
+else
+  touch Makefile-fuzz-generated.am
+fi
+
+${AUTORECONF} --install --sym $@
+
+if grep "Invalid policy. Valid policies: git-directory, minor-version." configure >/dev/null; then
+    echo "ERROR: ax_is_release.m4 is outdated. ./configure will fail."
+    echo "Please download from http://ftpmirror.gnu.org/autoconf-archive/autoconf-archive-2019.01.06.tar.xz"
+    exit 1
+fi

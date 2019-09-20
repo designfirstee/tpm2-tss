@@ -3,6 +3,166 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 
+## [2.3.0] - 2019-08-13
+### Added
+- tss2-tctildr: A new library that helps with tcti initialization
+  Recommend to use this in place of custom tcti loading code now !
+- tss2-rc: A new library that provides textual representations for return codes
+- Added release and maintainance info (~3 per year and latest 2 are supported)
+- Support for building on VxWorks.
+- Option to disable NIST-deprecated crypto (--disable-weak-crypto)
+- Support Esys_TR_FromTPMPublic on sessions (for use in Esys_FlushContext)
+- Better Windows/VS Support
+- Fuzz-Testing and Valgrind-Testing
+- map-files with correct symbol lists for tss2-sys and tss2-esys
+  This may lead to unresolved symbols in linked applications
+
+### Changed
+- Several further minor fixes and cleanups
+- Support to call Tss2_Sys_Execute repeatedly on certain errors
+- Reduced RAM consumption in Esys due to Tss2_Sys_Execute change
+- Automated session attribution clearing for esys (decrypt and encrypt) per cmd
+- Switched to git.mk, many ax_ makros and away from gnulib
+- Switched to config.h and autoheaders
+
+### Removed
+- Removed libtss2-mu from "Requires" field of libtss2-esys.pc
+  Needs to be added explicitely now
+
+### Fixed
+- All fixes from 2.2.1, 2.2.2 and 2.2.3
+- SPDX License Identifiers
+- Null-pointer problems in tcti-tbs
+- Default locality for tcti-mssim set to LOC_0
+- coverity and valgrind leaks detected in test programs (not library code)
+
+## [2.2.3] - 2019-05-28
+### Fixed
+ - Fix computation of session name
+ - Fixed PolicyPassword handling of session Attributes
+ - Fixed windows build from dist ball
+ - Fixed default tcti configure option
+ - Fixed nonce size calculation in ESYS sessions
+
+## [2.2.2] - 2019-03-28
+### Fixed
+ - Fixed wrong encryption flag in EncryptDecrypt
+ - Fixing openssl engine invocation
+
+## [2.2.1] - 2019-02-28
+### Fixed
+ - Forced RAND_bytes method to software implementation to avoid session spoofing
+ - Fixed OpenSSL symbolic naming conflict
+ - Fixed leaks of local point variables and BN_ctx
+ - Fixed memory leaks related to using regular free on gcrypt allocated objects
+ - Fixed leak of rsa->n in iesys_cryptossl_pk_encrypt
+ - Fixed memory leaks in iesys_cryptossl_pk_encrypt
+ - Fixed possible NULL dereference of big number
+
+## [2.2.0] - 2019-02-04
+### Fixed
+- Fixed leak of hkey on success in iesys_cryptossl_hmac_start
+- Fixed NULL ptr issues in Esys_HMAC_Start, Esys_HierarchyChangeAuth and Esys_NV_ChangeAuth
+- Fixed NULL ptr issue in sequenceHandleNode
+- Fixed NULL ptr auth handling in Esys_TR_SetAuth
+- Fixed NULL auth handling in iesys_compute_session_value
+- Fixed marshaling of TPM2Bs with sub types.
+- Fixed NULL ptr session handling in Esys_TRSess_SetAttributes
+- Fixed the way size of the hmac value of a session without authorization
+- Added missing MU functions for TPM2_NT type
+- Added missing MU functions for TPMA_ID_OBJECT type
+- Added missing type TPM2_NT into tss2_tpm2_types.h
+- Fixed wrong typename _ID_OBJECT in tss2_tpm2_types.h
+- Fixed build breakage when --with-maxloglevel is not 'trace'
+- Fixed build breakage in generated configure script when CFLAGS is set
+- Fixed configure scritp ERROR_IF_NO_PROG macro
+- Changed TPM2B type unmarshal to use sizeof of the dest buffer instead of dest
+- Fixed unmarshaling of the TPM2B type with invalid size
+- Removed dead code defect detected by coverity from Esys_TRSess_GetNonceTPM
+
+### Added
+- Added support for QNX build
+- Added support for partial reads in device TCTI
+
+## [2.1.1] - 2019-02-04
+### Fixed
+- Fixed leak of hkey on success in iesys_cryptossl_hmac_start
+- Fixed NULL ptr issues in Esys_HMAC_Start, Esys_HierarchyChangeAuth and Esys_NV_ChangeAuth
+- Fixed NULL ptr issue in sequenceHandleNode
+- Fixed NULL ptr auth handling in Esys_TR_SetAuth
+- Fixed NULL auth handling in iesys_compute_session_value
+- Fixed marshaling of TPM2Bs with sub types.
+- Fixed NULL ptr session handling in Esys_TRSess_SetAttributes
+- Fixed the way size of the hmac value of a session without authorization
+- Added missing MU functions for TPM2_NT type
+- Added missing MU functions for TPMA_ID_OBJECT type
+- Added missing type TPM2_NT into tss2_tpm2_types.h
+- Fixed wrong typename _ID_OBJECT in tss2_tpm2_types.h
+- Fixed build breakage when --with-maxloglevel is not 'trace'
+- Fixed build breakage in generated configure script when CFLAGS is set
+- Fixed configure scritp ERROR_IF_NO_PROG macro
+- Changed TPM2B type unmarshal to use sizeof of the dest buffer instead of dest
+- Fixed unmarshaling of the TPM2B type with invalid size
+- Removed dead code defect detected by coverity from Esys_TRSess_GetNonceTPM
+
+## [2.1.0]
+### Fixed
+- Fixed handling of the default TCTI
+- Changed logging to be ISO-C99 compatible
+- Fixed leak of dlopen handle
+- Fixed logging of a response header tag in Tss2_Sys_Execute
+- Fixed marshaling of TPM2B parameters in SAPI commands
+- Fixed unnecessary warning in Esys_Startup
+- Fixed warnings in doxygen documentation
+
+### Added
+- Added Esys_Free wrapper function for systems using different C runtime libraries
+- Added Windows TBS TCTI
+- Added non-blocking mode of operation in tcti-device
+- Added tests for Esys_HMAC and Esys_Hash
+- Enabled integration tests on physical TPM device
+- Added openssl libcrypto backend
+- Added Doxygen documentation to integration tests
+
+### Changed
+- Refactored SetDecryptParam
+- Enabled OpenSSL crypto backend by default
+
+## [2.0.2] - 2019-02-04
+### Fixed
+- Fixed NULL ptr issues in Esys_HMAC_Start, Esys_HierarchyChangeAuth and Esys_NV_ChangeAuth
+- Fixed NULL ptr issue in sequenceHandleNode
+- Fixed NULL ptr auth handling in Esys_TR_SetAuth
+- Fixed NULL auth handling in iesys_compute_session_value
+- Fixed marshaling of TPM2Bs with sub types.
+- Fixed NULL ptr session handling in Esys_TRSess_SetAttributes
+- Fixed the way size of the hmac value of a session without authorization
+- Added missing MU functions for TPM2_NT type
+- Added missing MU functions for TPMA_ID_OBJECT type
+- Added missing type TPM2_NT into tss2_tpm2_types.h
+- Fixed wrong typename _ID_OBJECT in tss2_tpm2_types.h
+- Fixed build breakage when --with-maxloglevel is not 'trace'
+- Fixed build breakage in generated configure script when CFLAGS is set
+- Fixed configure scritp ERROR_IF_NO_PROG macro
+- Changed TPM2B type unmarshal to use sizeof of the dest buffer instead of dest
+- Fixed unmarshaling of the TPM2B type with invalid size
+- Removed dead code defect detected by coverity from Esys_TRSess_GetNonceTPM
+
+## [2.0.1] - 2018-08-10
+### Fixed
+- Fixed problems with doxygan failing make distcheck
+- Fixed conversion of gcrypt mpi numbers to binary data
+- Fixed an error in parsing socket address in MSSIM TCTI
+- Fixed compilation error with --disable-tcti-mssim
+- Added initialization function for gcrypt to suppress warning
+- Fixed invalid type base type while marshaling TPMI_ECC_CURVE in Tss2_Sys_ECC_Parameters
+- Fixed invalid RSA encryption with exponent equal to 0
+- Fixed checking of return codes in ESAPI commands
+- Added checks for programs required by the test harness @ configure time
+- Fixed warning on TPM2_RC_INITIALIZE rc after a Startup in Esys_Startup
+- Checked for 1.2 TPM type response
+- Changed constants values in esys header file to unsigned
+
 ## [2.0.0] - 2018-06-20
 ### Added
 - Implementation of the Marshal/Unmarshal library (libtss2-mu)

@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -12,6 +16,7 @@
 #include "test-esapi.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** Test the basic commands for PCR processing.
  *
@@ -35,6 +40,8 @@ test_esys_pcr_basic(ESYS_CONTEXT * esys_context)
 {
     TSS2_RC r;
     int failure_return = EXIT_FAILURE;
+
+    TPMS_CAPABILITY_DATA *savedPCRs = NULL;
 
     ESYS_TR  pcrHandle_handle = 16;
     TPML_DIGEST_VALUES digests
@@ -118,6 +125,12 @@ test_esys_pcr_basic(ESYS_CONTEXT * esys_context)
     UINT32 sizeNeeded;
     UINT32 sizeAvailable;
 
+    r = Esys_GetCapability(esys_context,
+                           ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+                           TPM2_CAP_PCRS, 0, 10, NULL, &savedPCRs);
+    goto_if_error(r, "Error: GetCapabilities", error);
+
+
     r = Esys_PCR_Allocate(
         esys_context,
         ESYS_TR_RH_PLATFORM,
@@ -138,9 +151,26 @@ test_esys_pcr_basic(ESYS_CONTEXT * esys_context)
 
     goto_if_error(r, "Error: PCR_Allocate", error);
 
+    r = Esys_PCR_Allocate(
+        esys_context,
+        ESYS_TR_RH_PLATFORM,
+        ESYS_TR_PASSWORD,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &savedPCRs->data.assignedPCR,
+        &allocationSuccess,
+        &maxPCR,
+        &sizeNeeded,
+        &sizeAvailable);
+
+    goto_if_error(r, "Error: PCR_Allocate", error);
+
+    Esys_Free(savedPCRs);
+
     return EXIT_SUCCESS;
 
  error:
+    if (savedPCRs) Esys_Free(savedPCRs);
     return failure_return;
 
 }

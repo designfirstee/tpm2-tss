@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2015 - 2018 Intel Corporation
  * All rights reserved.
@@ -57,6 +57,7 @@ typedef struct {
     tcti_state_t state;
     tpm_header_t header;
     uint8_t locality;
+    bool partial;
 } TSS2_TCTI_COMMON_CONTEXT;
 
 /*

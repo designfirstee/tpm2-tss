@@ -1,13 +1,18 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <poll.h>
 
 #include <setjmp.h>
 #include <cmocka.h>
@@ -78,6 +83,15 @@ __wrap_write (int fd, const void *buffer, size_t buffer_size)
     return ret;
 }
 
+int
+__wrap_poll (struct pollfd *fds, nfds_t nfds, int timeout)
+{
+    int ret = mock_type (int);
+
+    fds->revents = fds->events;
+    return ret;
+}
+
 /* Setup functions to create the context for the device TCTI */
 static int
 tcti_device_setup (void **state)
@@ -123,7 +137,12 @@ tcti_device_get_poll_handles_test (void **state)
     TSS2_RC rc;
 
     rc = Tss2_Tcti_GetPollHandles (ctx, handles, &num_handles);
+#ifdef TCTI_ASYNC
+    assert_int_equal (rc, TSS2_RC_SUCCESS);
+    assert_int_equal (num_handles, 1);
+#else
     assert_int_equal (rc, TSS2_TCTI_RC_NOT_IMPLEMENTED);
+#endif
 }
 /*
  */
@@ -166,6 +185,7 @@ tcti_device_receive_success (void **state)
 
     /* Keep state machine check in `receive` from returning error. */
     tcti_common->state = TCTI_STATE_RECEIVE;
+    will_return (__wrap_poll, 1);
     will_return (__wrap_read, BUF_SIZE);
     will_return (__wrap_read, tpm2_buf);
     rc = Tss2_Tcti_Receive (ctx,
@@ -193,6 +213,7 @@ tcti_device_receive_eof_test (void **state)
 
     /* Keep state machine check in `receive` from returning error. */
     tcti_common->state = TCTI_STATE_RECEIVE;
+    will_return (__wrap_poll, 1);
     will_return (__wrap_read, 0);
     will_return (__wrap_read, tpm2_buf);
     rc = Tss2_Tcti_Receive (ctx,
@@ -221,6 +242,7 @@ tcti_device_receive_buffer_lt_response (void **state)
 
     /* Keep state machine check in `receive` from returning error. */
     tcti_common->state = TCTI_STATE_RECEIVE;
+    will_return (__wrap_poll, 1);
     will_return (__wrap_read, size);
     will_return (__wrap_read, tpm2_buf);
     rc = Tss2_Tcti_Receive (ctx,
@@ -250,6 +272,82 @@ tcti_device_transmit_success (void **state)
     assert_true (rc == TSS2_RC_SUCCESS);
     assert_memory_equal (tpm2_buf, buf_out, BUF_SIZE);
 }
+/*
+ * A test case for a successful poll
+ */
+static void
+tcti_device_poll_success (void **state)
+{
+    TSS2_TCTI_CONTEXT *ctx = (TSS2_TCTI_CONTEXT*)*state;
+    TSS2_TCTI_COMMON_CONTEXT *tcti_common = tcti_common_context_cast (ctx);
+    TSS2_RC rc;
+    /* output buffer for response */
+    uint8_t buf_out [BUF_SIZE] = { 0 };
+    size_t size = BUF_SIZE;
+
+    /* Keep state machine check in `receive` from returning error. */
+    tcti_common->state = TCTI_STATE_RECEIVE;
+    will_return (__wrap_poll, 1);
+    will_return (__wrap_read, BUF_SIZE);
+    will_return (__wrap_read, tpm2_buf);
+
+    rc = Tss2_Tcti_Receive (ctx,
+                            &size,
+                            buf_out,
+                            TSS2_TCTI_TIMEOUT_BLOCK);
+
+    assert_true (rc == TSS2_RC_SUCCESS);
+    assert_int_equal (BUF_SIZE, size);
+    assert_memory_equal (tpm2_buf, buf_out, size);
+}
+/*
+ * A test case for poll timeout
+ */
+static void
+tcti_device_poll_timeout (void **state)
+{
+    TSS2_TCTI_CONTEXT *ctx = (TSS2_TCTI_CONTEXT*)*state;
+    TSS2_TCTI_COMMON_CONTEXT *tcti_common = tcti_common_context_cast (ctx);
+    TSS2_RC rc;
+    /* output buffer for response */
+    uint8_t buf_out [BUF_SIZE] = { 0 };
+    size_t size = BUF_SIZE;
+
+    /* Keep state machine check in `receive` from returning error. */
+    tcti_common->state = TCTI_STATE_RECEIVE;
+    will_return (__wrap_poll, 0);
+
+    rc = Tss2_Tcti_Receive (ctx,
+                            &size,
+                            buf_out,
+                            TSS2_TCTI_TIMEOUT_BLOCK);
+
+    assert_true (rc == TSS2_TCTI_RC_TRY_AGAIN);
+}
+/*
+ * A test case for poll io-error
+ */
+static void
+tcti_device_poll_io_error (void **state)
+{
+    TSS2_TCTI_CONTEXT *ctx = (TSS2_TCTI_CONTEXT*)*state;
+    TSS2_TCTI_COMMON_CONTEXT *tcti_common = tcti_common_context_cast (ctx);
+    TSS2_RC rc;
+    /* output buffer for response */
+    uint8_t buf_out [BUF_SIZE] = { 0 };
+    size_t size = BUF_SIZE;
+
+    /* Keep state machine check in `receive` from returning error. */
+    tcti_common->state = TCTI_STATE_RECEIVE;
+    will_return (__wrap_poll, -1);
+
+    rc = Tss2_Tcti_Receive (ctx,
+                            &size,
+                            buf_out,
+                            TSS2_TCTI_TIMEOUT_BLOCK);
+
+    assert_true (rc == TSS2_TCTI_RC_IO_ERROR);
+}
 
 int
 main(int argc, char* argv[])
@@ -276,6 +374,15 @@ main(int argc, char* argv[])
                                          tcti_device_setup,
                                          tcti_device_teardown),
         cmocka_unit_test_setup_teardown (tcti_device_transmit_success,
+                                         tcti_device_setup,
+                                         tcti_device_teardown),
+        cmocka_unit_test_setup_teardown (tcti_device_poll_success,
+                                         tcti_device_setup,
+                                         tcti_device_teardown),
+        cmocka_unit_test_setup_teardown (tcti_device_poll_timeout,
+                                         tcti_device_setup,
+                                         tcti_device_teardown),
+        cmocka_unit_test_setup_teardown (tcti_device_poll_io_error,
                                          tcti_device_setup,
                                          tcti_device_teardown),
     };

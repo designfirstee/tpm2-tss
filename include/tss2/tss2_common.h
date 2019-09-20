@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************;
  * Copyright (c) 2015-2018, Intel Corporation
  *
@@ -63,7 +63,6 @@ typedef uint32_t TSS2_RC;
 #define TSS2_TCTI_RC_LAYER            TSS2_RC_LAYER(10)
 #define TSS2_RESMGR_RC_LAYER          TSS2_RC_LAYER(11)
 #define TSS2_RESMGR_TPM_RC_LAYER      TSS2_RC_LAYER(12)
-#define TSS2_DRIVER_RC_LAYER          TSS2_RC_LAYER(13)
 
 /* Base return codes.
  * These base codes indicate the error that occurred. They are
@@ -135,6 +134,8 @@ typedef uint32_t TSS2_RC;
                                                      TSS2_BASE_RC_MALFORMED_RESPONSE))
 #define TSS2_TCTI_RC_NOT_SUPPORTED              ((TSS2_RC)(TSS2_TCTI_RC_LAYER | \
                                                      TSS2_BASE_RC_NOT_SUPPORTED))
+#define TSS2_TCTI_RC_MEMORY                     ((TSS2_RC)(TSS2_TCTI_RC_LAYER | \
+                                                     TSS2_BASE_RC_MEMORY))
 /* SAPI error codes */
 #define TSS2_SYS_RC_GENERAL_FAILURE            ((TSS2_RC)(TSS2_SYS_RC_LAYER | \
                                                     TSS2_BASE_RC_GENERAL_FAILURE))

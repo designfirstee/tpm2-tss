@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,6 +15,7 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test the ESAPI command ObjectChangeAuth.
  *
@@ -74,7 +79,7 @@ test_esys_object_changeauth(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = authValuePrimary,
             .data = {
@@ -122,7 +127,7 @@ test_esys_object_changeauth(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitive2 = {
-        .size = 1,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -254,6 +259,31 @@ test_esys_object_changeauth(ESYS_CONTEXT * esys_context)
 }
 
 int
+test_esys_tr_setauth(ESYS_CONTEXT * esys_context)
+{
+    TSS2_RC r;
+    TPM2B_AUTH auth = {.size = 20,
+                       .buffer={30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+                                40, 41, 42, 43, 44, 45, 46, 47, 48, 49}};
+
+    r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &auth);
+    return_if_error(r, "Error in Esys_TR_SetAuth");
+
+    r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, NULL);
+    return_if_error(r, "Error in Esys_TR_SetAuth");
+
+    return EXIT_SUCCESS;
+}
+
+int
 test_invoke_esapi(ESYS_CONTEXT * esys_context) {
-    return test_esys_object_changeauth(esys_context);
+    TSS2_RC r;
+
+    r = test_esys_object_changeauth(esys_context);
+    return_if_error(r, "test_esys_object_changeauth");
+
+    r = test_esys_tr_setauth(esys_context);
+    return_if_error(r, "test_esys_tr_setauth");
+
+    return EXIT_SUCCESS;
 }

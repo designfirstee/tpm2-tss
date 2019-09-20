@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,7 +17,6 @@
 #define LOGMODULE test
 #include "util/log.h"
 #include "test.h"
-#include "sysapi_util.h"
 #include "sapi-util.h"
 #define PCR_8   8
 /**
@@ -99,4 +102,3 @@ test_invoke (TSS2_SYS_CONTEXT *sapi_context)
     LOG_INFO("PCR Extension Test Passed!");
     return 0;
 }
-

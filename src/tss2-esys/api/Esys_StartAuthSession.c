@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_mu.h"
 #include "tss2_sys.h"
@@ -13,6 +17,7 @@
 #include "esys_mu.h"
 #define LOGMODULE esys
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** Store command parameters inside the ESYS_CONTEXT for use during _Finish */
 static void store_input_parameters (
@@ -57,14 +62,14 @@ static void store_input_parameters (
  * @param[in]  shandle1 First session handle.
  * @param[in]  shandle2 Second session handle.
  * @param[in]  shandle3 Third session handle.
- * @param[in]  nonceCaller Initial nonceCaller, sets nonceTPM size for the session.
+ * @param[in]  nonceCaller Initial nonceCaller, sets nonceTPM size for the
+ *             session.
  * @param[in]  sessionType Indicates the type of the session; simple HMAC or
  *             policy (including a trial policy).
  * @param[in]  symmetric The algorithm and key size for parameter encryption.
  * @param[in]  authHash Hash algorithm to use for the session.
  * @param[out] sessionHandle  ESYS_TR handle of ESYS resource for TPMI_SH_AUTH_SESSION.
- * @retval TSS2_RC_SUCCESS on success
- * @retval ESYS_RC_SUCCESS if the function call was a success.
+ * @retval TSS2_RC_SUCCESS if the function call was a success.
  * @retval TSS2_ESYS_RC_BAD_REFERENCE if the esysContext or required input
  *         pointers or required output handle references are NULL.
  * @retval TSS2_ESYS_RC_BAD_CONTEXT: if esysContext corruption is detected.
@@ -75,13 +80,15 @@ static void store_input_parameters (
  * @retval TSS2_ESYS_RC_INSUFFICIENT_RESPONSE: if the TPM's response does not
  *          at least contain the tag, response length, and response code.
  * @retval TSS2_ESYS_RC_MALFORMED_RESPONSE: if the TPM's response is corrupted.
+ * @retval TSS2_ESYS_RC_RSP_AUTH_FAILED: if the response HMAC from the TPM
+           did not verify.
  * @retval TSS2_ESYS_RC_MULTIPLE_DECRYPT_SESSIONS: if more than one session has
  *         the 'decrypt' attribute bit set.
  * @retval TSS2_ESYS_RC_MULTIPLE_ENCRYPT_SESSIONS: if more than one session has
  *         the 'encrypt' attribute bit set.
- * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown to the
- *         ESYS_CONTEXT or are of the wrong type or if required ESYS_TR objects
- *         are ESYS_TR_NONE.
+ * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown
+ *         to the ESYS_CONTEXT or are of the wrong type or if required
+ *         ESYS_TR objects are ESYS_TR_NONE.
  * @retval TSS2_RCs produced by lower layers of the software stack may be
  *         returned to the caller unaltered unless handled internally.
  */
@@ -96,21 +103,13 @@ Esys_StartAuthSession(
     const TPM2B_NONCE *nonceCaller,
     TPM2_SE sessionType,
     const TPMT_SYM_DEF *symmetric,
-    TPMI_ALG_HASH authHash,
-    ESYS_TR *sessionHandle)
+    TPMI_ALG_HASH authHash, ESYS_TR *sessionHandle)
 {
     TSS2_RC r;
 
-    r = Esys_StartAuthSession_Async(esysContext,
-                tpmKey,
-                bind,
-                shandle1,
-                shandle2,
-                shandle3,
-                nonceCaller,
-                sessionType,
-                symmetric,
-                authHash);
+    r = Esys_StartAuthSession_Async(esysContext, tpmKey, bind, shandle1,
+                                    shandle2, shandle3, nonceCaller, sessionType,
+                                    symmetric, authHash);
     return_if_error(r, "Error in async function");
 
     /* Set the timeout to indefinite for now, since we want _Finish to block */
@@ -124,8 +123,7 @@ Esys_StartAuthSession(
      * a retransmission of the command via TPM2_RC_YIELDED.
      */
     do {
-        r = Esys_StartAuthSession_Finish(esysContext,
-                sessionHandle);
+        r = Esys_StartAuthSession_Finish(esysContext, sessionHandle);
         /* This is just debug information about the reattempt to finish the
            command */
         if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN)
@@ -153,7 +151,8 @@ Esys_StartAuthSession(
  * @param[in]  shandle1 First session handle.
  * @param[in]  shandle2 Second session handle.
  * @param[in]  shandle3 Third session handle.
- * @param[in]  nonceCaller Initial nonceCaller, sets nonceTPM size for the session.
+ * @param[in]  nonceCaller Initial nonceCaller, sets nonceTPM size for the
+ *             session.
  * @param[in]  sessionType Indicates the type of the session; simple HMAC or
  *             policy (including a trial policy).
  * @param[in]  symmetric The algorithm and key size for parameter encryption.
@@ -170,9 +169,9 @@ Esys_StartAuthSession(
  *         the 'decrypt' attribute bit set.
  * @retval TSS2_ESYS_RC_MULTIPLE_ENCRYPT_SESSIONS: if more than one session has
  *         the 'encrypt' attribute bit set.
- * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown to the
-           ESYS_CONTEXT or are of the wrong type or if required ESYS_TR objects
-           are ESYS_TR_NONE.
+ * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown
+ *         to the ESYS_CONTEXT or are of the wrong type or if required
+ *         ESYS_TR objects are ESYS_TR_NONE.
  */
 TSS2_RC
 Esys_StartAuthSession_Async(
@@ -209,14 +208,11 @@ Esys_StartAuthSession_Async(
         return r;
     esysContext->state = _ESYS_STATE_INTERNALERROR;
 
-    /* Check and store input parameters */
+    /* Check input parameters */
     r = check_session_feasibility(shandle1, shandle2, shandle3, 0);
     return_state_if_error(r, _ESYS_STATE_INIT, "Check session usage");
-    store_input_parameters(esysContext, tpmKey, bind,
-                nonceCaller,
-                sessionType,
-                symmetric,
-                authHash);
+    store_input_parameters(esysContext, tpmKey, bind, nonceCaller, sessionType,
+                           symmetric, authHash);
 
     /* Retrieve the metadata objects for provided handles */
     r = esys_GetResourceObject(esysContext, tpmKey, &tpmKeyNode);
@@ -229,7 +225,6 @@ Esys_StartAuthSession_Async(
                                       &encryptedSaltAux);
     return_if_error(r2, "Error in parameter encryption.");
 
-    esysContext->in.StartAuthSession.encryptedSalt = &encryptedSaltAux;
     if (nonceCaller == NULL) {
         r2 = iesys_crypto_hash_get_digest_size(authHash,&authHash_size);
         if (r2 != TSS2_RC_SUCCESS) {
@@ -247,16 +242,14 @@ Esys_StartAuthSession_Async(
         nonceCaller = esysContext->in.StartAuthSession.nonceCaller;
     }
 
-
     /* Initial invocation of SAPI to prepare the command buffer with parameters */
     r = Tss2_Sys_StartAuthSession_Prepare(esysContext->sys,
-                (tpmKeyNode == NULL) ? TPM2_RH_NULL : tpmKeyNode->rsrc.handle,
-                (bindNode == NULL) ? TPM2_RH_NULL : bindNode->rsrc.handle,
-                nonceCaller,
-                encryptedSalt,
-                sessionType,
-                symmetric,
-                authHash);
+                                          (tpmKeyNode == NULL) ? TPM2_RH_NULL
+                                           : tpmKeyNode->rsrc.handle,
+                                          (bindNode == NULL) ? TPM2_RH_NULL
+                                           : bindNode->rsrc.handle, nonceCaller,
+                                          encryptedSalt, sessionType, symmetric,
+                                          authHash);
     return_state_if_error(r, _ESYS_STATE_INIT, "SAPI Prepare returned error.");
 
     /* Calculate the cpHash Values */
@@ -268,14 +261,19 @@ Esys_StartAuthSession_Async(
 
     /* Generate the auth values and set them in the SAPI command buffer */
     r = iesys_gen_auths(esysContext, tpmKeyNode, bindNode, NULL, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "Error in computation of auth values");
+    return_state_if_error(r, _ESYS_STATE_INIT,
+                          "Error in computation of auth values");
+
     esysContext->authsCount = auths.count;
-    r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    if (auths.count > 0) {
+        r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
+        return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    }
 
     /* Trigger execution and finish the async invocation */
     r = Tss2_Sys_ExecuteAsync(esysContext->sys);
-    return_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Finish (Execute Async)");
+    return_state_if_error(r, _ESYS_STATE_INTERNALERROR,
+                          "Finish (Execute Async)");
 
     esysContext->state = _ESYS_STATE_SENT;
 
@@ -303,15 +301,16 @@ Esys_StartAuthSession_Async(
  * @retval TSS2_ESYS_RC_TRY_AGAIN: if the timeout counter expires before the
  *         TPM response is received.
  * @retval TSS2_ESYS_RC_INSUFFICIENT_RESPONSE: if the TPM's response does not
- *          at least contain the tag, response length, and response code.
+ *         at least contain the tag, response length, and response code.
+ * @retval TSS2_ESYS_RC_RSP_AUTH_FAILED: if the response HMAC from the TPM did
+ *         not verify.
  * @retval TSS2_ESYS_RC_MALFORMED_RESPONSE: if the TPM's response is corrupted.
  * @retval TSS2_RCs produced by lower layers of the software stack may be
  *         returned to the caller unaltered unless handled internally.
  */
 TSS2_RC
 Esys_StartAuthSession_Finish(
-    ESYS_CONTEXT *esysContext,
-    ESYS_TR *sessionHandle)
+    ESYS_CONTEXT *esysContext, ESYS_TR *sessionHandle)
 {
     TPM2B_NONCE lnonceTPM;
     TSS2_RC r;
@@ -324,7 +323,8 @@ Esys_StartAuthSession_Finish(
     }
 
     /* Check for correct sequence and set sequence to irregular for now */
-    if (esysContext->state != _ESYS_STATE_SENT) {
+    if (esysContext->state != _ESYS_STATE_SENT &&
+        esysContext->state != _ESYS_STATE_RESUBMISSION) {
         LOG_ERROR("Esys called in bad sequence.");
         return TSS2_ESYS_RC_BAD_SEQUENCE;
     }
@@ -342,18 +342,14 @@ Esys_StartAuthSession_Finish(
         return r;
 
     IESYS_RESOURCE *rsrc = &sessionHandleNode->rsrc;
-    rsrc->misc.rsrc_session.sessionAttributes =
-        TPMA_SESSION_CONTINUESESSION;
-    rsrc->misc.rsrc_session.sessionType =
-        esysContext->in.StartAuthSession.sessionType;
-    rsrc->misc.rsrc_session.authHash =
-        esysContext->in.StartAuthSession.authHash;
-    rsrc->misc.rsrc_session.symmetric =
-        *esysContext->in.StartAuthSession.symmetric;
-    rsrc->misc.rsrc_session.nonceCaller =
-        esysContext->in.StartAuthSession.nonceCallerData;
+    rsrc->handle = ESYS_TR_NONE;
+    rsrc->misc.rsrc_session.sessionAttributes = TPMA_SESSION_CONTINUESESSION;
+    rsrc->misc.rsrc_session.sessionType = esysContext->in.StartAuthSession.sessionType;
+    rsrc->misc.rsrc_session.authHash = esysContext->in.StartAuthSession.authHash;
+    rsrc->misc.rsrc_session.symmetric = *esysContext->in.StartAuthSession.symmetric;
+    rsrc->misc.rsrc_session.nonceCaller = esysContext->in.StartAuthSession.nonceCallerData;
 
-    /*Receive the TPM response and handle resubmissions if necessary. */
+    /* Receive the TPM response and handle resubmissions if necessary. */
     r = Tss2_Sys_ExecuteFinish(esysContext->sys, esysContext->timeout);
     if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN) {
         LOG_DEBUG("A layer below returned TRY_AGAIN: %" PRIx32, r);
@@ -365,22 +361,13 @@ Esys_StartAuthSession_Finish(
     if (r == TPM2_RC_RETRY || r == TPM2_RC_TESTING || r == TPM2_RC_YIELDED) {
         LOG_DEBUG("TPM returned RETRY, TESTING or YIELDED, which triggers a "
             "resubmission: %" PRIx32, r);
-        if (esysContext->submissionCount >= _ESYS_MAX_SUBMISSIONS) {
+        if (esysContext->submissionCount++ >= _ESYS_MAX_SUBMISSIONS) {
             LOG_WARNING("Maximum number of (re)submissions has been reached.");
             esysContext->state = _ESYS_STATE_INIT;
             goto error_cleanup;
         }
         esysContext->state = _ESYS_STATE_RESUBMISSION;
-        r = Esys_StartAuthSession_Async(esysContext,
-                esysContext->in.StartAuthSession.tpmKey,
-                esysContext->in.StartAuthSession.bind,
-                esysContext->session_type[0],
-                esysContext->session_type[1],
-                esysContext->session_type[2],
-                esysContext->in.StartAuthSession.nonceCaller,
-                esysContext->in.StartAuthSession.sessionType,
-                esysContext->in.StartAuthSession.symmetric,
-                esysContext->in.StartAuthSession.authHash);
+        r = Tss2_Sys_ExecuteAsync(esysContext->sys);
         if (r != TSS2_RC_SUCCESS) {
             LOG_WARNING("Error attempting to resubmit");
             /* We do not set esysContext->state here but inherit the most recent
@@ -408,16 +395,18 @@ Esys_StartAuthSession_Finish(
      */
     r = iesys_check_response(esysContext);
     goto_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Error: check response",
-                      error_cleanup);
+                        error_cleanup);
+
     /*
      * After the verification of the response we call the complete function
      * to deliver the result.
      */
     r = Tss2_Sys_StartAuthSession_Complete(esysContext->sys,
-                &sessionHandleNode->rsrc.handle,
-                &lnonceTPM);
-    goto_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Received error from SAPI"
-                        " unmarshaling" ,error_cleanup);
+                                           &sessionHandleNode->rsrc.handle,
+                                           &lnonceTPM);
+    goto_state_if_error(r, _ESYS_STATE_INTERNALERROR,
+                        "Received error from SAPI unmarshaling" ,
+                        error_cleanup);
 
     sessionHandleNode->rsrc.misc.rsrc_session.nonceTPM = lnonceTPM;
     sessionHandleNode->rsrc.rsrcType = IESYSC_SESSION_RSRC;
@@ -455,11 +444,11 @@ Esys_StartAuthSession_Finish(
             secret_size += keyHash_size;
         if (bind != ESYS_TR_NONE && bindNode != NULL)
             secret_size += bindNode->auth.size;
-        if (secret_size == 0) {
-            return_error(TSS2_ESYS_RC_GENERAL_FAILURE,
-                         "Invalid secret size (0).");
-        }
-        uint8_t *secret = malloc(secret_size);
+        /*
+         * A non null pointer for secret is required by the subsequent functions,
+         * hence a malloc is called with size 1 if secret_size is zero.
+         */
+        uint8_t *secret = malloc(secret_size ? secret_size : 1);
         if (secret == NULL) {
             LOG_ERROR("Out of memory.");
             return TSS2_ESYS_RC_MEMORY;
@@ -493,11 +482,24 @@ Esys_StartAuthSession_Finish(
 
         sessionHandleNode->rsrc.misc.rsrc_session.sessionKey.size = authHash_size;
     }
+    size_t offset = 0;
+    r = Tss2_MU_TPM2_HANDLE_Marshal(sessionHandleNode->rsrc.handle,
+                                    &sessionHandleNode->rsrc.name.name[0],
+                                    sizeof(sessionHandleNode->rsrc.name.name),
+                                    &offset);
+    goto_if_error(r, "Marshal session name", error_cleanup);
+
+    sessionHandleNode->rsrc.name.size = offset;
     esysContext->state = _ESYS_STATE_INIT;
 
     return TSS2_RC_SUCCESS;
 
 error_cleanup:
+    if (sessionHandleNode->rsrc.handle != ESYS_TR_NONE) {
+        r = Esys_FlushContext(esysContext, sessionHandleNode->rsrc.handle);
+        if (r != TSS2_RC_SUCCESS)
+            LOG_ERROR("FlushContext failed.");
+    }
     Esys_TR_Close(esysContext, sessionHandle);
 
     return r;

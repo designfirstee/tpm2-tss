@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
@@ -11,6 +15,7 @@
 #include "esys_iutil.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test the change of an authorization value of
  *  a hierarchy.
@@ -58,7 +63,7 @@ test_esys_hierarchychangeauth(ESYS_CONTEXT * esys_context)
     auth_changed = true;
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -135,6 +140,8 @@ test_esys_hierarchychangeauth(ESYS_CONTEXT * esys_context)
     r = Esys_TR_SetAuth(esys_context, ESYS_TR_RH_OWNER, &newAuth);
     goto_if_error(r, "Error SetAuth", error);
 
+    /* Check whether HierarchyChangeAuth with auth equal NULL works */
+
     r = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER, ESYS_TR_PASSWORD,
                            ESYS_TR_NONE, ESYS_TR_NONE, &inSensitivePrimary, &inPublic,
                            &outsideInfo, &creationPCR, &primaryHandle,
@@ -150,7 +157,7 @@ test_esys_hierarchychangeauth(ESYS_CONTEXT * esys_context)
                                  ESYS_TR_PASSWORD,
                                  ESYS_TR_NONE,
                                  ESYS_TR_NONE,
-                                 &emptyAuth);
+                                 NULL);
     goto_if_error(r, "Error: HierarchyChangeAuth", error);
 
     return EXIT_SUCCESS;

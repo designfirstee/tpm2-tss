@@ -1,7 +1,12 @@
 [![Linux Build Status](https://travis-ci.org/tpm2-software/tpm2-tss.svg?branch=master)](https://travis-ci.org/tpm2-software/tpm2-tss)
 [![Windows Build status](https://ci.appveyor.com/api/projects/status/2rdmyn1ndkiavngn?svg=true)](https://ci.appveyor.com/project/tpm2-software/tpm2-tss)
 [![Coverity Scan](https://img.shields.io/coverity/scan/3997.svg)](https://scan.coverity.com/projects/tpm2-tss)
-[![Coverage Status](https://coveralls.io/repos/github/tpm2-software/tpm2-tss/badge.svg?branch=master)](https://coveralls.io/github/tpm2-software/tpm2-tss?branch=master)
+[![Coverage Status](https://codecov.io/gh/tpm2-software/tpm2-tss/branch/master/graph/badge.svg)](https://codecov.io/gh/tpm2-software/tpm2-tss)
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/2332/badge)](https://bestpractices.coreinfrastructure.org/projects/2332)
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/tpm2-software/tpm2-tss.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/tpm2-software/tpm2-tss/alerts/)
+[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/tpm2-software/tpm2-tss.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/tpm2-software/tpm2-tss/context:cpp)
+[![Documentation Status](https://readthedocs.org/projects/tpm2-tss/badge/?version=latest)](https://tpm2-tss.readthedocs.io/en/latest/?badge=latest)
+[![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/tpm2-tss.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:tpm2-tss)
 
 # Overview
 This repository hosts source code implementing the Trusted Computing Group's (TCG) TPM2 Software Stack (TSS).
@@ -26,7 +31,7 @@ It is expected that any number of libraries implementing the TCTI API will be im
 Currently this repository provides two TCTI implementations: libtss2-tcti-device and libtss2-tcti-mssim.
 The former should be used for direct access to the TPM through the Linux kernel driver.
 The latter implements the protocol exposed by the Microsoft software TPM2 simulator.
-* The [TCG TSS 2.0 Overview and Common Structures Specification](https://trustedcomputinggroup.org/wp-content/uploads/TSS_Overview_Common_Structures_Version-0.9_Revision-03_Review_030918.pdf) forms the basis for all implementations in this project. NOTE: We deviate from this draft of the specification by increasing the value of TPM2_NUM_PCR_BANKS from 3 to 16 to ensure compatibility with TPM2 implementations that have enabled a lareger than typical number of PCR banks. This larger value for TPM2_NUM_PCR_BANKS is expected to be included in a future revision of the specification.
+* The [TCG TSS 2.0 Overview and Common Structures Specification](https://trustedcomputinggroup.org/wp-content/uploads/TSS_Overview_Common_Structures_Version-0.9_Revision-03_Review_030918.pdf) forms the basis for all implementations in this project. NOTE: We deviate from this draft of the specification by increasing the value of TPM2_NUM_PCR_BANKS from 3 to 16 to ensure compatibility with TPM2 implementations that have enabled a larger than typical number of PCR banks. This larger value for TPM2_NUM_PCR_BANKS is expected to be included in a future revision of the specification.
 
 # Build and Installation Instructions:
 Instructions to build and install tpm2-tss are available in the [INSTALL](INSTALL.md) file.
@@ -34,6 +39,12 @@ Instructions to build and install tpm2-tss are available in the [INSTALL](INSTAL
 # Getting in Touch:
 If you're looking to discuss the source code in this project or get some questions answered you should join the 01.org TPM2 mailing list: https://lists.01.org/mailman/listinfo/tpm2.
 We also have an IRC channel set up on [FreeNode](https://freenode.net/) called \#tpm2.0-tss.
+
+In case you want to contribute to the project, please also have a look at the [Contribution Guidelines](CONTRIBUTING.md).
+
+# Documentation
+
+The doxygen documentation can either be built by oneself (see the [INSTALL](INSTALL.md) file) or browsed directly on [tpm2-tss.readthedocs.io](https://tpm2-tss.readthedocs.io/).
 
 # Test Suite
 This repository contains a test suite intended to exercise the TCTI, SAPI and ESAPI code.
@@ -73,27 +84,116 @@ NOTE: The unit and integration tests can be enabled independently.
 The --enable-unit option controls unit tests, and --enable-integration
 controls the integration tests.
 
-# [Architecture/Block Diagram](doc/arch.md)
+### Running tests on physical TPM device
+To run integration tests on a physical TPM device, including a TPM hardware
+or a software TPM implemented in platform firmware the configure script
+provides two options.
+The first option is called --with-ptpm and it is used to point to the TPM
+device interface exposed by the OS, for example:
+
+```
+  $ ./configure  --with-ptpm=/dev/tpm0
+```
+The second option, --with-ptpmtests, enables a "class" of test.
+There are three classes:
+1. destructive - these tests can affect TPM capability or lifespan
+2. mandatory   - these tests check all the functionality that is mandatory
+                 per the TCG specification (default).
+3. optional    - these tests are for functionality that is optional per the
+                 TCG specification.
+
+For example to enable both mandatory and optional test cases during configure
+one needs to set this flag as follows:
+
+```
+  $ ./configure --with-ptpmtests="mandatory,optional"
+```
+Tht default value for the flag is "mandatory"
+Any combination of the three is valid.
+The two flags are only valid when the integration tests are enabled with
+--enable-integration flag.
+
+After that the following command is used to run the test on the configured
+TPM device:
+
+```
+  $ sudo make check-ptpm
+```
+  or
+```
+  $ sudo make check -j 1
+```
+
+Note: The tests can not be run in paralel.
+
+### Running valgrind check
+The unit and integration tests can be run under the valgrind tool, which
+performs additional checks on the library and test code, such as memory
+leak checks etc. The following command is used to run the tests under
+valgrind:
+
+  $ make check-valgrind
+
+This command will enable all valgrind "tools" and kick off as many test
+as many tools it supports. It is possible to enable different valgrind
+tools (checks) in more granularity. This can be controlled by invoking
+different tools separately using check-valgrind-&lt;tool&gt;, for instance:
+
+```
+  $ make check-valgrind-memcheck
+```
+  or
+```
+  $ make check-valgrind-drd
+```
+
+Currently the the following tools are supported:
+
+memcheck - Performs memory related checks. This is the default tool.
+helgrind - Performs synchronization errors checks.
+drd      - Performs thread related checks.
+sgcheck  - Performs stack overrun related checks.
+
+Note that the valgring tool can also be invoked manually using the standard
+libtool:
+
+```
+  $ libtool exec valgrind --tool=memcheck --leak-check=full \
+    test/integration/esys-auto-session-flags.int
+```
+
+This allows for more control on what checks are performed.
+
+### Logging
+While investigating issues it might be helpful to enable extra debug/trace
+output. It can be enabled separately for different components.
+The description how to do this can be found in the [logging](doc/logging.md) file.
+
+### Fuzzing
+All system API function calls can be tested using a fuzzing library.
+The description how to do this can be found in the [fuzzing](doc/fuzzing.md) file.
+
+# Architecture/Block Diagram
 SAPI library, TAB/RM, and Test Code Block Diagram:
-![Architecture Block Diagram](doc/TSS%20block%20diagram.png)
+![Architecture Block Diagram](doc/TSS_block_diagram.png)
 
 # Project Layout
-├── doc     : various bits of documentation  
-├── include : header files installed in $(includedir)  
-│   └── tss2      : all public headers for this project  
-├── lib     : data files used by the build or installed into $(libdir)  
-├── m4      : autoconf support macros  
-├── man     : man pages  
-├── script  : scripts used by the build or CI  
-├── src     : all source files  
-│   ├── tss2-esys : enhanced system API (ESAPI) implementation  
-│   │   └── api   : ESAPI TPM API implementation  
-│   ├── tss2-mu   : TPM2 type marshaling/unmarshaling (MU) API implementation  
-│   ├── tss2-sys  : system API (SAPI) implementation  
-│   │   └── api   : SAPI public API implementation  
-│   ├── tss2-tcti : TCTI implementations for device and mssim  
-│   └── util      : Internal utility library (e.g. logging framework)  
-└── test    : test code  
-    ├── integration : integration test harness and test cases  
-    ├── tpmclient   : monolithic, legacy test application  
-    └── unit        : unit tests  
+├── doc     : various bits of documentation\
+├── include : header files installed in $(includedir)\
+│   └── tss2      : all public headers for this project\
+├── lib     : data files used by the build or installed into $(libdir)\
+├── m4      : autoconf support macros\
+├── man     : man pages\
+├── script  : scripts used by the build or CI\
+├── src     : all source files\
+│   ├── tss2-esys : enhanced system API (ESAPI) implementation\
+│   │   └── api   : ESAPI TPM API implementation\
+│   ├── tss2-mu   : TPM2 type marshaling/unmarshaling (MU) API implementation\
+│   ├── tss2-sys  : system API (SAPI) implementation\
+│   │   └── api   : SAPI public API implementation\
+│   ├── tss2-tcti : TCTI implementations for device and mssim\
+│   └── util      : Internal utility library (e.g. logging framework)\
+└── test    : test code\
+    ├── integration : integration test harness and test cases\
+    ├── tpmclient   : monolithic, legacy test application\
+    └── unit        : unit tests

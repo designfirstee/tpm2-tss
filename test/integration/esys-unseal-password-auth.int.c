@@ -1,10 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
 
-#define _GNU_SOURCE
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +14,6 @@
 #include <stdint.h>
 
 #include <tss2_esys.h>
-#include "tss2-sys/sysapi_util.h"
 
 #include "test.h"
 #include "esys_types.h"
@@ -20,6 +21,7 @@
 
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test the unseal operation for the ESAPI command
  *  Unseal.
@@ -59,7 +61,7 @@ test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                 .size = 0,
@@ -157,7 +159,7 @@ test_esys_unseal_password_auth(ESYS_CONTEXT * esys_context)
     };
 
     TPM2B_SENSITIVE_CREATE inSensitive2 = {
-        .size = 1,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                 .size = 0,

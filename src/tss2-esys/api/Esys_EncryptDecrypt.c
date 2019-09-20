@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_mu.h"
 #include "tss2_sys.h"
@@ -13,34 +17,7 @@
 #include "esys_mu.h"
 #define LOGMODULE esys
 #include "util/log.h"
-
-/** Store command parameters inside the ESYS_CONTEXT for use during _Finish */
-static void store_input_parameters (
-    ESYS_CONTEXT *esysContext,
-    ESYS_TR keyHandle,
-    TPMI_YES_NO decrypt,
-    TPMI_ALG_SYM_MODE mode,
-    const TPM2B_IV *ivIn,
-    const TPM2B_MAX_BUFFER *inData)
-{
-    esysContext->in.EncryptDecrypt.keyHandle = keyHandle;
-    esysContext->in.EncryptDecrypt.decrypt = decrypt;
-    esysContext->in.EncryptDecrypt.mode = mode;
-    if (ivIn == NULL) {
-        esysContext->in.EncryptDecrypt.ivIn = NULL;
-    } else {
-        esysContext->in.EncryptDecrypt.ivInData = *ivIn;
-        esysContext->in.EncryptDecrypt.ivIn =
-            &esysContext->in.EncryptDecrypt.ivInData;
-    }
-    if (inData == NULL) {
-        esysContext->in.EncryptDecrypt.inData = NULL;
-    } else {
-        esysContext->in.EncryptDecrypt.inDataData = *inData;
-        esysContext->in.EncryptDecrypt.inData =
-            &esysContext->in.EncryptDecrypt.inDataData;
-    }
-}
+#include "util/aux_util.h"
 
 /** One-Call function for TPM2_EncryptDecrypt
  *
@@ -63,8 +40,7 @@ static void store_input_parameters (
  *             (callee-allocated)
  * @param[out] ivOut Chaining value to use for IV in next round.
  *             (callee-allocated)
- * @retval TSS2_RC_SUCCESS on success
- * @retval ESYS_RC_SUCCESS if the function call was a success.
+ * @retval TSS2_RC_SUCCESS if the function call was a success.
  * @retval TSS2_ESYS_RC_BAD_REFERENCE if the esysContext or required input
  *         pointers or required output handle references are NULL.
  * @retval TSS2_ESYS_RC_BAD_CONTEXT: if esysContext corruption is detected.
@@ -75,13 +51,15 @@ static void store_input_parameters (
  * @retval TSS2_ESYS_RC_INSUFFICIENT_RESPONSE: if the TPM's response does not
  *          at least contain the tag, response length, and response code.
  * @retval TSS2_ESYS_RC_MALFORMED_RESPONSE: if the TPM's response is corrupted.
+ * @retval TSS2_ESYS_RC_RSP_AUTH_FAILED: if the response HMAC from the TPM
+           did not verify.
  * @retval TSS2_ESYS_RC_MULTIPLE_DECRYPT_SESSIONS: if more than one session has
  *         the 'decrypt' attribute bit set.
  * @retval TSS2_ESYS_RC_MULTIPLE_ENCRYPT_SESSIONS: if more than one session has
  *         the 'encrypt' attribute bit set.
- * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown to the
- *         ESYS_CONTEXT or are of the wrong type or if required ESYS_TR objects
- *         are ESYS_TR_NONE.
+ * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown
+ *         to the ESYS_CONTEXT or are of the wrong type or if required
+ *         ESYS_TR objects are ESYS_TR_NONE.
  * @retval TSS2_ESYS_RC_NO_DECRYPT_PARAM: if one of the sessions has the
  *         'decrypt' attribute set and the command does not support encryption
  *         of the first command parameter.
@@ -104,15 +82,8 @@ Esys_EncryptDecrypt(
 {
     TSS2_RC r;
 
-    r = Esys_EncryptDecrypt_Async(esysContext,
-                keyHandle,
-                shandle1,
-                shandle2,
-                shandle3,
-                decrypt,
-                mode,
-                ivIn,
-                inData);
+    r = Esys_EncryptDecrypt_Async(esysContext, keyHandle, shandle1, shandle2,
+                                  shandle3, decrypt, mode, ivIn, inData);
     return_if_error(r, "Error in async function");
 
     /* Set the timeout to indefinite for now, since we want _Finish to block */
@@ -126,9 +97,7 @@ Esys_EncryptDecrypt(
      * a retransmission of the command via TPM2_RC_YIELDED.
      */
     do {
-        r = Esys_EncryptDecrypt_Finish(esysContext,
-                outData,
-                ivOut);
+        r = Esys_EncryptDecrypt_Finish(esysContext, outData, ivOut);
         /* This is just debug information about the reattempt to finish the
            command */
         if ((r & ~TSS2_RC_LAYER_MASK) == TSS2_BASE_RC_TRY_AGAIN)
@@ -172,9 +141,9 @@ Esys_EncryptDecrypt(
  *         the 'decrypt' attribute bit set.
  * @retval TSS2_ESYS_RC_MULTIPLE_ENCRYPT_SESSIONS: if more than one session has
  *         the 'encrypt' attribute bit set.
- * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown to the
-           ESYS_CONTEXT or are of the wrong type or if required ESYS_TR objects
-           are ESYS_TR_NONE.
+ * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown
+ *         to the ESYS_CONTEXT or are of the wrong type or if required
+ *         ESYS_TR objects are ESYS_TR_NONE.
  * @retval TSS2_ESYS_RC_NO_DECRYPT_PARAM: if one of the sessions has the
  *         'decrypt' attribute set and the command does not support encryption
  *         of the first command parameter.
@@ -209,14 +178,9 @@ Esys_EncryptDecrypt_Async(
         return r;
     esysContext->state = _ESYS_STATE_INTERNALERROR;
 
-    /* Check and store input parameters */
+    /* Check input parameters */
     r = check_session_feasibility(shandle1, shandle2, shandle3, 1);
     return_state_if_error(r, _ESYS_STATE_INIT, "Check session usage");
-    store_input_parameters(esysContext, keyHandle,
-                decrypt,
-                mode,
-                ivIn,
-                inData);
 
     /* Retrieve the metadata objects for provided handles */
     r = esys_GetResourceObject(esysContext, keyHandle, &keyHandleNode);
@@ -224,11 +188,9 @@ Esys_EncryptDecrypt_Async(
 
     /* Initial invocation of SAPI to prepare the command buffer with parameters */
     r = Tss2_Sys_EncryptDecrypt_Prepare(esysContext->sys,
-                (keyHandleNode == NULL) ? TPM2_RH_NULL : keyHandleNode->rsrc.handle,
-                decrypt,
-                mode,
-                ivIn,
-                inData);
+                                        (keyHandleNode == NULL) ? TPM2_RH_NULL
+                                         : keyHandleNode->rsrc.handle, decrypt,
+                                        mode, ivIn, inData);
     return_state_if_error(r, _ESYS_STATE_INIT, "SAPI Prepare returned error.");
 
     /* Calculate the cpHash Values */
@@ -241,14 +203,19 @@ Esys_EncryptDecrypt_Async(
 
     /* Generate the auth values and set them in the SAPI command buffer */
     r = iesys_gen_auths(esysContext, keyHandleNode, NULL, NULL, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "Error in computation of auth values");
+    return_state_if_error(r, _ESYS_STATE_INIT,
+                          "Error in computation of auth values");
+
     esysContext->authsCount = auths.count;
-    r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    if (auths.count > 0) {
+        r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
+        return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    }
 
     /* Trigger execution and finish the async invocation */
     r = Tss2_Sys_ExecuteAsync(esysContext->sys);
-    return_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Finish (Execute Async)");
+    return_state_if_error(r, _ESYS_STATE_INTERNALERROR,
+                          "Finish (Execute Async)");
 
     esysContext->state = _ESYS_STATE_SENT;
 
@@ -279,7 +246,9 @@ Esys_EncryptDecrypt_Async(
  * @retval TSS2_ESYS_RC_TRY_AGAIN: if the timeout counter expires before the
  *         TPM response is received.
  * @retval TSS2_ESYS_RC_INSUFFICIENT_RESPONSE: if the TPM's response does not
- *          at least contain the tag, response length, and response code.
+ *         at least contain the tag, response length, and response code.
+ * @retval TSS2_ESYS_RC_RSP_AUTH_FAILED: if the response HMAC from the TPM did
+ *         not verify.
  * @retval TSS2_ESYS_RC_MALFORMED_RESPONSE: if the TPM's response is corrupted.
  * @retval TSS2_RCs produced by lower layers of the software stack may be
  *         returned to the caller unaltered unless handled internally.
@@ -300,7 +269,8 @@ Esys_EncryptDecrypt_Finish(
     }
 
     /* Check for correct sequence and set sequence to irregular for now */
-    if (esysContext->state != _ESYS_STATE_SENT) {
+    if (esysContext->state != _ESYS_STATE_SENT &&
+        esysContext->state != _ESYS_STATE_RESUBMISSION) {
         LOG_ERROR("Esys called in bad sequence.");
         return TSS2_ESYS_RC_BAD_SEQUENCE;
     }
@@ -332,21 +302,13 @@ Esys_EncryptDecrypt_Finish(
     if (r == TPM2_RC_RETRY || r == TPM2_RC_TESTING || r == TPM2_RC_YIELDED) {
         LOG_DEBUG("TPM returned RETRY, TESTING or YIELDED, which triggers a "
             "resubmission: %" PRIx32, r);
-        if (esysContext->submissionCount >= _ESYS_MAX_SUBMISSIONS) {
+        if (esysContext->submissionCount++ >= _ESYS_MAX_SUBMISSIONS) {
             LOG_WARNING("Maximum number of (re)submissions has been reached.");
             esysContext->state = _ESYS_STATE_INIT;
             goto error_cleanup;
         }
         esysContext->state = _ESYS_STATE_RESUBMISSION;
-        r = Esys_EncryptDecrypt_Async(esysContext,
-                esysContext->in.EncryptDecrypt.keyHandle,
-                esysContext->session_type[0],
-                esysContext->session_type[1],
-                esysContext->session_type[2],
-                esysContext->in.EncryptDecrypt.decrypt,
-                esysContext->in.EncryptDecrypt.mode,
-                esysContext->in.EncryptDecrypt.ivIn,
-                esysContext->in.EncryptDecrypt.inData);
+        r = Tss2_Sys_ExecuteAsync(esysContext->sys);
         if (r != TSS2_RC_SUCCESS) {
             LOG_WARNING("Error attempting to resubmit");
             /* We do not set esysContext->state here but inherit the most recent
@@ -374,16 +336,19 @@ Esys_EncryptDecrypt_Finish(
      */
     r = iesys_check_response(esysContext);
     goto_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Error: check response",
-                      error_cleanup);
+                        error_cleanup);
+
     /*
      * After the verification of the response we call the complete function
      * to deliver the result.
      */
     r = Tss2_Sys_EncryptDecrypt_Complete(esysContext->sys,
-                (outData != NULL) ? *outData : NULL,
-                (ivOut != NULL) ? *ivOut : NULL);
-    goto_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Received error from SAPI"
-                        " unmarshaling" ,error_cleanup);
+                                         (outData != NULL) ? *outData : NULL,
+                                         (ivOut != NULL) ? *ivOut : NULL);
+    goto_state_if_error(r, _ESYS_STATE_INTERNALERROR,
+                        "Received error from SAPI unmarshaling" ,
+                        error_cleanup);
+
     esysContext->state = _ESYS_STATE_INIT;
 
     return TSS2_RC_SUCCESS;

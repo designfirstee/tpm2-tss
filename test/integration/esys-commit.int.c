@@ -1,16 +1,22 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  *******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include <stdlib.h>
 
 #include "tss2_esys.h"
 
 #include "esys_iutil.h"
+#include "test-esapi.h"
 #define LOGMODULE test
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** This test is intended to test Esys_Commit.
  *   based on an ECC key
@@ -25,6 +31,7 @@
  *
  * @param[in,out] esys_context The ESYS_CONTEXT.
  * @retval EXIT_FAILURE
+ * @retval EXIT_SKIP
  * @retval EXIT_SUCCESS
  */
 
@@ -34,6 +41,7 @@ test_esys_commit(ESYS_CONTEXT * esys_context)
     TSS2_RC r;
     ESYS_TR eccHandle = ESYS_TR_NONE;
     ESYS_TR session = ESYS_TR_NONE;
+    int failure_return = EXIT_FAILURE;
     TPMT_SYM_DEF symmetric = {
         .algorithm = TPM2_ALG_AES,
         .keyBits = { .aes = 128 },
@@ -56,7 +64,7 @@ test_esys_commit(ESYS_CONTEXT * esys_context)
     goto_if_error(r, "Error: During initialization of session", error);
 
     TPM2B_SENSITIVE_CREATE inSensitive = {
-        .size = 4,
+        .size = 0,
         .sensitive = {
             .userAuth = {
                  .size = 0,
@@ -133,6 +141,13 @@ test_esys_commit(ESYS_CONTEXT * esys_context)
                            &outsideInfo, &creationPCR, &eccHandle,
                            &outPublic, &creationData, &creationHash,
                            &creationTicket);
+
+    if ((r & ~TSS2_RC_LAYER_MASK) == (TPM2_RC_SCHEME | TPM2_RC_P | TPM2_RC_2)) {
+        LOG_WARNING("Scheme ECDAA not supported by TPM.");
+        failure_return = EXIT_SKIP;
+        goto error;
+    }
+
     goto_if_error(r, "Error esapi create primary", error);
 
     TPM2B_ECC_POINT P1 = {0};
@@ -175,7 +190,7 @@ test_esys_commit(ESYS_CONTEXT * esys_context)
         }
     }
 
-    return EXIT_FAILURE;
+    return failure_return;
 }
 
 int

@@ -1,8 +1,12 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /*******************************************************************************
  * Copyright 2017-2018, Fraunhofer SIT sponsored by Infineon Technologies AG
  * All rights reserved.
  ******************************************************************************/
+
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
 
 #include "tss2_mu.h"
 #include "tss2_sys.h"
@@ -13,15 +17,14 @@
 #include "esys_mu.h"
 #define LOGMODULE esys
 #include "util/log.h"
+#include "util/aux_util.h"
 
 /** Store command parameters inside the ESYS_CONTEXT for use during _Finish */
 static void store_input_parameters (
     ESYS_CONTEXT *esysContext,
-    ESYS_TR authHandle,
     ESYS_TR nvIndex)
 {
-    esysContext->in.NV_UndefineSpace.authHandle = authHandle;
-    esysContext->in.NV_UndefineSpace.nvIndex = nvIndex;
+    esysContext->in.NV.nvIndex = nvIndex;
 }
 
 /** One-Call function for TPM2_NV_UndefineSpace
@@ -37,8 +40,7 @@ static void store_input_parameters (
  * @param[in]  shandle1 Session handle for authorization of authHandle
  * @param[in]  shandle2 Second session handle.
  * @param[in]  shandle3 Third session handle.
- * @retval TSS2_RC_SUCCESS on success
- * @retval ESYS_RC_SUCCESS if the function call was a success.
+ * @retval TSS2_RC_SUCCESS if the function call was a success.
  * @retval TSS2_ESYS_RC_BAD_REFERENCE if the esysContext or required input
  *         pointers or required output handle references are NULL.
  * @retval TSS2_ESYS_RC_BAD_CONTEXT: if esysContext corruption is detected.
@@ -49,13 +51,15 @@ static void store_input_parameters (
  * @retval TSS2_ESYS_RC_INSUFFICIENT_RESPONSE: if the TPM's response does not
  *          at least contain the tag, response length, and response code.
  * @retval TSS2_ESYS_RC_MALFORMED_RESPONSE: if the TPM's response is corrupted.
+ * @retval TSS2_ESYS_RC_RSP_AUTH_FAILED: if the response HMAC from the TPM
+           did not verify.
  * @retval TSS2_ESYS_RC_MULTIPLE_DECRYPT_SESSIONS: if more than one session has
  *         the 'decrypt' attribute bit set.
  * @retval TSS2_ESYS_RC_MULTIPLE_ENCRYPT_SESSIONS: if more than one session has
  *         the 'encrypt' attribute bit set.
- * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown to the
- *         ESYS_CONTEXT or are of the wrong type or if required ESYS_TR objects
- *         are ESYS_TR_NONE.
+ * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown
+ *         to the ESYS_CONTEXT or are of the wrong type or if required
+ *         ESYS_TR objects are ESYS_TR_NONE.
  * @retval TSS2_ESYS_RC_NO_DECRYPT_PARAM: if one of the sessions has the
  *         'decrypt' attribute set and the command does not support encryption
  *         of the first command parameter.
@@ -76,12 +80,8 @@ Esys_NV_UndefineSpace(
 {
     TSS2_RC r;
 
-    r = Esys_NV_UndefineSpace_Async(esysContext,
-                authHandle,
-                nvIndex,
-                shandle1,
-                shandle2,
-                shandle3);
+    r = Esys_NV_UndefineSpace_Async(esysContext, authHandle, nvIndex, shandle1,
+                                    shandle2, shandle3);
     return_if_error(r, "Error in async function");
 
     /* Set the timeout to indefinite for now, since we want _Finish to block */
@@ -135,9 +135,9 @@ Esys_NV_UndefineSpace(
  *         the 'decrypt' attribute bit set.
  * @retval TSS2_ESYS_RC_MULTIPLE_ENCRYPT_SESSIONS: if more than one session has
  *         the 'encrypt' attribute bit set.
- * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown to the
-           ESYS_CONTEXT or are of the wrong type or if required ESYS_TR objects
-           are ESYS_TR_NONE.
+ * @retval TSS2_ESYS_RC_BAD_TR: if any of the ESYS_TR objects are unknown
+ *         to the ESYS_CONTEXT or are of the wrong type or if required
+ *         ESYS_TR objects are ESYS_TR_NONE.
  * @retval TSS2_ESYS_RC_NO_DECRYPT_PARAM: if one of the sessions has the
  *         'decrypt' attribute set and the command does not support encryption
  *         of the first command parameter.
@@ -171,10 +171,10 @@ Esys_NV_UndefineSpace_Async(
         return r;
     esysContext->state = _ESYS_STATE_INTERNALERROR;
 
-    /* Check and store input parameters */
+    /* Check input parameters */
     r = check_session_feasibility(shandle1, shandle2, shandle3, 1);
     return_state_if_error(r, _ESYS_STATE_INIT, "Check session usage");
-    store_input_parameters(esysContext, authHandle, nvIndex);
+    store_input_parameters(esysContext, nvIndex);
 
     /* Retrieve the metadata objects for provided handles */
     r = esys_GetResourceObject(esysContext, authHandle, &authHandleNode);
@@ -184,8 +184,10 @@ Esys_NV_UndefineSpace_Async(
 
     /* Initial invocation of SAPI to prepare the command buffer with parameters */
     r = Tss2_Sys_NV_UndefineSpace_Prepare(esysContext->sys,
-                (authHandleNode == NULL) ? TPM2_RH_NULL : authHandleNode->rsrc.handle,
-                (nvIndexNode == NULL) ? TPM2_RH_NULL : nvIndexNode->rsrc.handle);
+                                          (authHandleNode == NULL) ? TPM2_RH_NULL
+                                           : authHandleNode->rsrc.handle,
+                                          (nvIndexNode == NULL) ? TPM2_RH_NULL
+                                           : nvIndexNode->rsrc.handle);
     return_state_if_error(r, _ESYS_STATE_INIT, "SAPI Prepare returned error.");
 
     /* Calculate the cpHash Values */
@@ -198,14 +200,19 @@ Esys_NV_UndefineSpace_Async(
 
     /* Generate the auth values and set them in the SAPI command buffer */
     r = iesys_gen_auths(esysContext, authHandleNode, nvIndexNode, NULL, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "Error in computation of auth values");
+    return_state_if_error(r, _ESYS_STATE_INIT,
+                          "Error in computation of auth values");
+
     esysContext->authsCount = auths.count;
-    r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
-    return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    if (auths.count > 0) {
+        r = Tss2_Sys_SetCmdAuths(esysContext->sys, &auths);
+        return_state_if_error(r, _ESYS_STATE_INIT, "SAPI error on SetCmdAuths");
+    }
 
     /* Trigger execution and finish the async invocation */
     r = Tss2_Sys_ExecuteAsync(esysContext->sys);
-    return_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Finish (Execute Async)");
+    return_state_if_error(r, _ESYS_STATE_INTERNALERROR,
+                          "Finish (Execute Async)");
 
     esysContext->state = _ESYS_STATE_SENT;
 
@@ -232,7 +239,9 @@ Esys_NV_UndefineSpace_Async(
  * @retval TSS2_ESYS_RC_TRY_AGAIN: if the timeout counter expires before the
  *         TPM response is received.
  * @retval TSS2_ESYS_RC_INSUFFICIENT_RESPONSE: if the TPM's response does not
- *          at least contain the tag, response length, and response code.
+ *         at least contain the tag, response length, and response code.
+ * @retval TSS2_ESYS_RC_RSP_AUTH_FAILED: if the response HMAC from the TPM did
+ *         not verify.
  * @retval TSS2_ESYS_RC_MALFORMED_RESPONSE: if the TPM's response is corrupted.
  * @retval TSS2_RCs produced by lower layers of the software stack may be
  *         returned to the caller unaltered unless handled internally.
@@ -251,7 +260,8 @@ Esys_NV_UndefineSpace_Finish(
     }
 
     /* Check for correct sequence and set sequence to irregular for now */
-    if (esysContext->state != _ESYS_STATE_SENT) {
+    if (esysContext->state != _ESYS_STATE_SENT &&
+        esysContext->state != _ESYS_STATE_RESUBMISSION) {
         LOG_ERROR("Esys called in bad sequence.");
         return TSS2_ESYS_RC_BAD_SEQUENCE;
     }
@@ -269,18 +279,13 @@ Esys_NV_UndefineSpace_Finish(
     if (r == TPM2_RC_RETRY || r == TPM2_RC_TESTING || r == TPM2_RC_YIELDED) {
         LOG_DEBUG("TPM returned RETRY, TESTING or YIELDED, which triggers a "
             "resubmission: %" PRIx32, r);
-        if (esysContext->submissionCount >= _ESYS_MAX_SUBMISSIONS) {
+        if (esysContext->submissionCount++ >= _ESYS_MAX_SUBMISSIONS) {
             LOG_WARNING("Maximum number of (re)submissions has been reached.");
             esysContext->state = _ESYS_STATE_INIT;
             return r;
         }
         esysContext->state = _ESYS_STATE_RESUBMISSION;
-        r = Esys_NV_UndefineSpace_Async(esysContext,
-                esysContext->in.NV_UndefineSpace.authHandle,
-                esysContext->in.NV_UndefineSpace.nvIndex,
-                esysContext->session_type[0],
-                esysContext->session_type[1],
-                esysContext->session_type[2]);
+        r = Tss2_Sys_ExecuteAsync(esysContext->sys);
         if (r != TSS2_RC_SUCCESS) {
             LOG_WARNING("Error attempting to resubmit");
             /* We do not set esysContext->state here but inherit the most recent
@@ -307,16 +312,19 @@ Esys_NV_UndefineSpace_Finish(
      * parameter decryption have to be done.
      */
     r = iesys_check_response(esysContext);
-    return_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Error: check response");
+    return_state_if_error(r, _ESYS_STATE_INTERNALERROR,
+                          "Error: check response");
+
     /*
      * After the verification of the response we call the complete function
      * to deliver the result.
      */
     r = Tss2_Sys_NV_UndefineSpace_Complete(esysContext->sys);
-    return_state_if_error(r, _ESYS_STATE_INTERNALERROR, "Received error from SAPI"
-                        " unmarshaling" );
+    return_state_if_error(r, _ESYS_STATE_INTERNALERROR,
+                          "Received error from SAPI unmarshaling" );
+
     /* The ESYS_TR object (nvIndex) has to be invalidated */
-    r = Esys_TR_Close(esysContext, &esysContext->in.NV_UndefineSpace.nvIndex);
+    r = Esys_TR_Close(esysContext, &esysContext->in.NV.nvIndex);
     return_if_error(r, "invalidate object");
 
     esysContext->state = _ESYS_STATE_INIT;

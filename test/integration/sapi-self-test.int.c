@@ -1,9 +1,13 @@
-/* SPDX-License-Identifier: BSD-2 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /***********************************************************************
  * Copyright (c) 2017-2018, Intel Corporation
  *
  * All rights reserved.
  ***********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include <config.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -15,9 +19,9 @@
 
 /*
  * This program contains integration test for SAPI Tss2_Sys_SelfTest
- * that perform test of its capabilities. This program is calling  
+ * that perform test of its capabilities. This program is calling
  * SelfTest SAPI and make sure the response code are success
- * when fullTest set as YES and when it is set as NO.  
+ * when fullTest set as YES and when it is set as NO.
  */
 int
 test_invoke (TSS2_SYS_CONTEXT *sapi_context)
